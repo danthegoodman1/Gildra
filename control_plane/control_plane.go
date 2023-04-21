@@ -1,15 +1,26 @@
 package control_plane
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/danthegoodman1/Gildra/internal"
+	"github.com/mailgun/groupcache/v2"
+	"time"
 )
 
 var (
 	ErrDecoding = errors.New("error decoding")
+
+	// Idempotency check
+	registeredHandlers = false
+
+	FQDNGroupCache *groupcache.Group
+	CertGroupCache *groupcache.Group
 )
 
 type (
@@ -22,9 +33,72 @@ type (
 	}
 )
 
+func RegisterCacheHandlers() {
+	if registeredHandlers {
+		return
+	}
+	FQDNGroupCache = groupcache.NewGroup("fqdn_config", Env_FQDNCacheMB, groupcache.GetterFunc(
+		func(ctx context.Context, fqdn string, dest groupcache.Sink) error {
+
+			fqdnConf, err := getFQDNConfig(fqdn)
+			if err != nil {
+				return fmt.Errorf("error in GetFQDNConfig: %w", err)
+			}
+
+			// serialize as JSON - optimize later
+			jsonBytes, err := json.Marshal(fqdnConf)
+			if err != nil {
+				return fmt.Errorf("error in json.Marshal for fqdnConf: %w", err)
+			}
+
+			// Set the user in the groupcache to expire after 5 minutes
+			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(Env_FQDNCacheSeconds)))
+		},
+	))
+
+	// The cert group will look up through the FQDNConfigGroup, and store the result for longer.
+	// Not very elegant but this is the way we have to handle it to both only ever need to both serve
+	// on request and cache the certs and routing config with separate timeouts
+	CertGroupCache = groupcache.NewGroup("certs", Env_CertCacheMB, groupcache.GetterFunc(
+		func(ctx context.Context, fqdn string, dest groupcache.Sink) error {
+
+			// TODO: Do the request
+			fqdnConf, err := getFQDNConfig(fqdn)
+			if err != nil {
+				return fmt.Errorf("error in GetFQDNConfig: %w", err)
+			}
+
+			cert, err := fqdnConf.GetCert()
+			if err != nil {
+				return fmt.Errorf("error in GetCert: %w", err)
+			}
+
+			// serialize as JSON - optimize later
+			jsonBytes, err := json.Marshal(cert)
+			if err != nil {
+				return fmt.Errorf("error in json.Marshal for tls.Certificate: %w", err)
+			}
+
+			internal.Metric_CacheMissTLSLookups.Inc()
+
+			// Set the user in the groupcache to expire after 5 minutes
+			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(Env_CertCacheSeconds)))
+		},
+	))
+	registeredHandlers = true
+}
+
+func getFQDNConfig(fqdn string) (*FQDNConfig, error) {
+	return nil, nil
+}
+
 func GetFQDNConfig(fqdn string) (*FQDNConfig, error) {
 	// TODO: First check groupcache for stored results
 	// TODO: If not in groupcache, then we need to visit the
+	return nil, nil
+}
+
+func GetFQDNCert(fqdn string) (*tls.Certificate, error) {
 	return nil, nil
 }
 
@@ -58,9 +132,4 @@ func (c *FQDNConfig) GetCert() (*tls.Certificate, error) {
 		PrivateKey:  key,
 	}
 	return &certificate, nil
-}
-
-// Methods for groupcache
-func (c *FQDNConfig) String() string {
-	return ""
 }
