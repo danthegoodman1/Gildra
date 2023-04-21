@@ -134,7 +134,10 @@ func StartServers() error {
 	}
 
 	// Configure the server to support HTTP/2
-	http2.ConfigureServer(server, nil)
+	err := http2.ConfigureServer(server, nil)
+	if err != nil {
+		return fmt.Errorf("error in http2.ConfigureServer: %w", err)
+	}
 
 	h3Server := http3.Server{
 		TLSConfig:  tlsConfig,
