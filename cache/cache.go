@@ -7,6 +7,7 @@ import (
 	"github.com/danthegoodman1/Gildra/common"
 	"github.com/danthegoodman1/Gildra/control_plane"
 	"github.com/danthegoodman1/Gildra/gologger"
+	"github.com/danthegoodman1/Gildra/internal"
 	"github.com/danthegoodman1/Gildra/utils"
 	"github.com/mailgun/groupcache/v2"
 	"net/http"
@@ -70,6 +71,8 @@ func CreateGroupCache() error {
 			if err != nil {
 				return fmt.Errorf("error in json.Marshal for fqdnConf: %w", err)
 			}
+
+			internal.Metric_CacheMissTLSLookups.Inc()
 
 			// Set the user in the groupcache to expire after 5 minutes
 			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(Env_CertCacheSeconds)))
