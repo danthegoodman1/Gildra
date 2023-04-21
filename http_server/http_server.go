@@ -3,6 +3,7 @@ package http_server
 import (
 	"crypto/tls"
 	"fmt"
+	"github.com/danthegoodman1/Gildra/control_plane"
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/internal"
 	"github.com/quic-go/quic-go"
@@ -14,6 +15,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path"
+	"strings"
 	"time"
 
 	"golang.org/x/net/http2"
@@ -23,12 +26,39 @@ var (
 	logger = gologger.NewLogger()
 )
 
+const (
+	ACMEPathPrefix = "/.well-known/acme-challenge/"
+)
+
 var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	if upgradeHeader := r.Header.Get("Upgrade"); upgradeHeader == "h2c" {
 		r.Proto = "HTTP/2.0"
 	}
 	fmt.Println("Proto:", r.Proto)
 	fmt.Println("Headers:", r.Header)
+
+	// Check for an ACME challenge
+	if strings.HasPrefix(r.URL.Path, ACMEPathPrefix) {
+		fqdn := r.Header.Get("Host")
+		logger.Debug().Msgf("got ACME HTTP challenge request for FQDN %s", fqdn)
+
+		_, key := path.Split(r.URL.Path)
+		token, err := control_plane.GetHTTPChallengeToken(fqdn, key)
+		if err != nil {
+			logger.Error().Err(err).Msgf("error in GetHTTPChallengeToken for FQDN %s", fqdn)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, err = w.Write([]byte(token))
+		if err != nil {
+			logger.Error().Err(err).Msg("error in writing bytes to response for HTTP ACME challenge")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if r.Header.Get("Connection") == "Upgrade" {
 		fmt.Println("Handling a websocket connection", r.Header.Get("Connection"), r.Header.Get("Upgrade"))
 	}
@@ -52,6 +82,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handleUpgradeResponse(w, req, res)
 		return
 	}
+
 	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
 	w.WriteHeader(http.StatusCreated)
 	fmt.Fprint(w, "Hello world\n")
