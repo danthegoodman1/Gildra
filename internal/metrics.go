@@ -14,4 +14,8 @@ var (
 		Name: "cache_miss_tls_lookups",
 		Help: "TLS lookups that missed the cache (groupcache getter function invoked)",
 	})
+	Metric_ACME_HTTP_Challenges = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "acme_http_challenges",
+		Help: "Successfully answered ACME HTTP challenges",
+	})
 )

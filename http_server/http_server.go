@@ -49,13 +49,14 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		w.WriteHeader(http.StatusOK)
 		_, err = w.Write([]byte(token))
 		if err != nil {
 			logger.Error().Err(err).Msg("error in writing bytes to response for HTTP ACME challenge")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusOK)
+		internal.Metric_ACME_HTTP_Challenges.Inc()
 		return
 	}
 
