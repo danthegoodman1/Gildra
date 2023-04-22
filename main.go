@@ -5,6 +5,7 @@ import (
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/http_server"
 	"github.com/danthegoodman1/Gildra/internal"
+	"github.com/danthegoodman1/Gildra/utils"
 	"golang.org/x/sync/errgroup"
 	"os"
 	"os/signal"
@@ -37,6 +38,13 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
 	logger.Info().Msg("received shutdown signal!")
+
+	// Provide time for load balancers to de-register before stopping accepting connections
+	if utils.Env_SleepSeconds > 0 {
+		logger.Info().Msgf("sleeping for %ds before exiting", utils.Env_SleepSeconds)
+		time.Sleep(time.Second * time.Duration(utils.Env_SleepSeconds))
+		logger.Info().Msgf("slept for %ds, exiting", utils.Env_SleepSeconds)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
