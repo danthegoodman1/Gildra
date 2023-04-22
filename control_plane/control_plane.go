@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/danthegoodman1/Gildra/internal"
+	"github.com/go-redis/redis/v8"
 	"github.com/mailgun/groupcache/v2"
 	"time"
 )
@@ -21,6 +22,11 @@ var (
 
 	FQDNGroupCache *groupcache.Group
 	CertGroupCache *groupcache.Group
+
+	redisClient = redis.NewClient(func() *redis.Options {
+		opt, _ := redis.ParseURL("redis://default:33584fc0dfa54056b5af3ad060e99918@us1-dominant-antelope-38601.upstash.io:38601")
+		return opt
+	}())
 )
 
 type (
@@ -105,7 +111,11 @@ func GetFQDNCert(fqdn string) (*tls.Certificate, error) {
 // GetHTTPChallengeToken fetches the HTTP challenge token from the control plane
 // to fulfil the HTTP ACME challenge.
 func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
-	return "", nil
+	token, err := redisClient.Get(context.Background(), idToken).Result()
+	if err != nil {
+		return "", fmt.Errorf("error in redis get: %w", err)
+	}
+	return token, nil
 }
 
 func (c *FQDNConfig) GetCert() (*tls.Certificate, error) {

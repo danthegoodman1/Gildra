@@ -44,12 +44,14 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger.Debug().Msgf("got ACME HTTP challenge request for FQDN %s", fqdn)
 
 		_, key := path.Split(r.URL.Path)
+		fmt.Println("Got challenge for fqdn", fqdn, "key", key)
 		token, err := control_plane.GetHTTPChallengeToken(fqdn, key)
 		if err != nil {
 			logger.Error().Err(err).Msgf("error in GetHTTPChallengeToken for FQDN %s", fqdn)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		fmt.Println("Got token", token)
 		w.WriteHeader(http.StatusOK)
 		_, err = w.Write([]byte(token))
 		if err != nil {
@@ -57,6 +59,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		fmt.Println("wrote response", token)
 		internal.Metric_ACME_HTTP_Challenges.Inc()
 		return
 	} else if strings.HasPrefix(r.URL.Path, ZeroSSLPathPrefix) {
@@ -64,12 +67,14 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger.Debug().Msgf("got ZeroSSL HTTP challenge request for FQDN %s", fqdn)
 
 		_, key := path.Split(r.URL.Path)
+		fmt.Println("Got challenge for fqdn", fqdn, "key", key)
 		token, err := control_plane.GetHTTPChallengeToken(fqdn, key)
 		if err != nil {
 			logger.Error().Err(err).Msgf("error in GetHTTPChallengeToken for FQDN %s", fqdn)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		fmt.Println("Got token", token)
 		w.WriteHeader(http.StatusOK)
 		_, err = w.Write([]byte(token))
 		if err != nil {
@@ -77,6 +82,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		fmt.Println("wrote response", token)
 		internal.Metric_ZEROSSL_HTTP_Challenges.Inc()
 		return
 	}

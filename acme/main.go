@@ -2,23 +2,29 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"fmt"
+	"github.com/go-redis/redis/v8"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/samber/lo"
+)
+
+var (
+	redisClient = redis.NewClient(func() *redis.Options {
+		opt, _ := redis.ParseURL("redis://default:33584fc0dfa54056b5af3ad060e99918@us1-dominant-antelope-38601.upstash.io:38601")
+		return opt
+	}())
 )
 
 func main() {
@@ -97,7 +103,7 @@ func letsencrypt() {
 			Identifiers: []Identifier{
 				{
 					Type:  "dns",
-					Value: "billabull.com", // the domain to get a cert for
+					Value: "getinsync.co", // the domain to get a cert for
 				},
 			},
 		},
@@ -218,6 +224,12 @@ func letsencrypt() {
 			log.Fatalf("error listening on http: %s", err)
 		}
 	}()
+
+	cmd := redisClient.Set(context.Background(), challenge.Token, keyAuth, 0)
+	if err := cmd.Err(); err != nil {
+		log.Fatalf("error in redis get: %w", err)
+	}
+	log.Println("stored in redis")
 
 	// ---------------------------------------------------------------------------
 	// Tell acme server to check the challenge, and validate
@@ -346,9 +358,6 @@ func letsencrypt() {
 		log.Fatalf("error signing content: %s", err)
 	}
 
-	log.Println("sleeping for 5s")
-	time.Sleep(time.Second * 5)
-
 	log.Printf("Making request to %s", orderResponse.Finalize)
 	req, err = http.NewRequest("POST", orderResponse.Finalize, bytes.NewReader([]byte(signed.FullSerialize())))
 	if err != nil {
@@ -379,6 +388,42 @@ func letsencrypt() {
 		log.Fatalf("error unmarshalling order response: %s", err)
 	}
 
+	for time.Since(s) < time.Second*300 && fulfilledOrder.Status == "processing" {
+		log.Println("waiting on result processing...", string(responseBody))
+		time.Sleep(time.Second * 2)
+		log.Println("checking", orderLocation)
+		signed, err = SignContent(orderLocation, location, []byte{}, privateKey, &ca)
+		if err != nil {
+			log.Fatalf("error signing content: %s", err)
+		}
+
+		log.Printf("Making request to %s", orderLocation)
+		req, err = http.NewRequest("POST", orderLocation, bytes.NewReader([]byte(signed.FullSerialize())))
+		if err != nil {
+			log.Fatalf("error making new request: %s", err)
+		}
+		req.Header.Add("content-type", "application/jose+json")
+
+		res, err = http.DefaultClient.Do(req)
+		if err != nil {
+			log.Fatalf("error doing request: %s", err)
+		}
+
+		responseBody, err = ioutil.ReadAll(res.Body)
+		if err != nil {
+			log.Fatalf("error reading body: %s", err)
+		}
+
+		log.Printf("code %d", res.StatusCode)
+		if res.StatusCode > 299 {
+			log.Fatalf("code %d: %s", res.StatusCode, responseBody)
+		}
+		err = json.Unmarshal(responseBody, &fulfilledOrder)
+		if err != nil {
+			log.Fatalf("error unmarshalling order response: %s", err)
+		}
+	}
+
 	if fulfilledOrder.Status == "valid" {
 		log.Println("order valid!")
 	} else {
@@ -397,9 +442,6 @@ func letsencrypt() {
 	if err != nil {
 		log.Fatalf("error signing content: %s", err)
 	}
-
-	log.Println("sleeping for 5s")
-	time.Sleep(time.Second * 5)
 
 	log.Printf("Making request to %s", certResource.CertURL)
 	req, err = http.NewRequest("POST", certResource.CertURL, bytes.NewReader([]byte(signed.FullSerialize())))
@@ -538,7 +580,7 @@ func zerossl() {
 			Identifiers: []Identifier{
 				{
 					Type:  "dns",
-					Value: "billabull.com", // the domain to get a cert for
+					Value: "getinsync.co", // the domain to get a cert for
 				},
 			},
 		},
@@ -659,6 +701,12 @@ func zerossl() {
 			log.Fatalf("error listening on http: %s", err)
 		}
 	}()
+
+	cmd := redisClient.Set(context.Background(), challenge.Token, keyAuth, 0)
+	if err := cmd.Err(); err != nil {
+		log.Fatalf("error in redis get: %w", err)
+	}
+	log.Println("stored in redis")
 
 	// ---------------------------------------------------------------------------
 	// Tell acme server to check the challenge, and validate
@@ -787,9 +835,6 @@ func zerossl() {
 		log.Fatalf("error signing content: %s", err)
 	}
 
-	log.Println("sleeping for 5s")
-	time.Sleep(time.Second * 5)
-
 	log.Printf("Making request to %s", orderResponse.Finalize)
 	req, err = http.NewRequest("POST", orderResponse.Finalize, bytes.NewReader([]byte(signed.FullSerialize())))
 	if err != nil {
@@ -820,6 +865,42 @@ func zerossl() {
 		log.Fatalf("error unmarshalling order response: %s", err)
 	}
 
+	for time.Since(s) < time.Second*300 && fulfilledOrder.Status == "processing" {
+		log.Println("waiting on result processing...", string(responseBody))
+		time.Sleep(time.Second * 2)
+		log.Println("checking", orderLocation)
+		signed, err = SignContent(orderLocation, location, []byte{}, privateKey, &ca)
+		if err != nil {
+			log.Fatalf("error signing content: %s", err)
+		}
+
+		log.Printf("Making request to %s", orderLocation)
+		req, err = http.NewRequest("POST", orderLocation, bytes.NewReader([]byte(signed.FullSerialize())))
+		if err != nil {
+			log.Fatalf("error making new request: %s", err)
+		}
+		req.Header.Add("content-type", "application/jose+json")
+
+		res, err = http.DefaultClient.Do(req)
+		if err != nil {
+			log.Fatalf("error doing request: %s", err)
+		}
+
+		responseBody, err = ioutil.ReadAll(res.Body)
+		if err != nil {
+			log.Fatalf("error reading body: %s", err)
+		}
+
+		log.Printf("code %d", res.StatusCode)
+		if res.StatusCode > 299 {
+			log.Fatalf("code %d: %s", res.StatusCode, responseBody)
+		}
+		err = json.Unmarshal(responseBody, &fulfilledOrder)
+		if err != nil {
+			log.Fatalf("error unmarshalling order response: %s", err)
+		}
+	}
+
 	if fulfilledOrder.Status == "valid" {
 		log.Println("order valid!")
 	} else {
@@ -838,9 +919,6 @@ func zerossl() {
 	if err != nil {
 		log.Fatalf("error signing content: %s", err)
 	}
-
-	log.Println("sleeping for 5s")
-	time.Sleep(time.Second * 5)
 
 	log.Printf("Making request to %s", certResource.CertURL)
 	req, err = http.NewRequest("POST", certResource.CertURL, bytes.NewReader([]byte(signed.FullSerialize())))
@@ -891,57 +969,4 @@ func zerossl() {
 	}
 
 	log.Println("done!")
-}
-
-func newEABProtectedHeader(kid, accountURL string, publicKey *ecdsa.PublicKey) (map[string]interface{}, error) {
-	jwk, err := jwkPublicKey(publicKey)
-	if err != nil {
-		return nil, fmt.Errorf("error encoding JWK: %s", err)
-	}
-	return map[string]interface{}{
-		"alg": "HS256",
-		"kid": kid,
-		"url": accountURL,
-		"jwk": jwk,
-	}, nil
-}
-
-func createEABJWS(privateKey *ecdsa.PrivateKey, protectedBytes, hmacKey []byte) ([]byte, error) {
-	payload := []byte("")
-
-	encodedProtectedBytes := base64.RawURLEncoding.EncodeToString(protectedBytes)
-
-	h := hmac.New(sha256.New, hmacKey)
-	h.Write(append([]byte(encodedProtectedBytes), byte('.')))
-	h.Write(payload)
-
-	encodedSig := base64.RawURLEncoding.EncodeToString(h.Sum(nil))
-
-	jws := map[string]interface{}{
-		"protected": encodedProtectedBytes,
-		"payload":   base64.RawURLEncoding.EncodeToString(payload),
-		"signature": encodedSig,
-	}
-
-	eabJWS, err := json.Marshal(jws)
-	if err != nil {
-		return nil, fmt.Errorf("error marshalling EAB JWS: %s", err)
-	}
-
-	return eabJWS, nil
-}
-
-func jwkPublicKey(publicKey *ecdsa.PublicKey) (map[string]interface{}, error) {
-	keyBytes := elliptic.Marshal(publicKey.Curve, publicKey.X, publicKey.Y)
-	switch publicKey.Curve {
-	case elliptic.P256():
-		return map[string]interface{}{
-			"kty": "EC",
-			"crv": "P-256",
-			"x":   base64.RawURLEncoding.EncodeToString(keyBytes[1:33]),
-			"y":   base64.RawURLEncoding.EncodeToString(keyBytes[33:]),
-		}, nil
-	default:
-		return nil, fmt.Errorf("unsupported curve: %v", publicKey.Curve)
-	}
 }
