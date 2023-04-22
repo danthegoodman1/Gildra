@@ -26,7 +26,7 @@ func main() {
 }
 
 func letsencrypt() {
-	log.Println("starting letsencrypt HTTP challenge (statging)")
+	log.Println("starting letsencrypt HTTP challenge (staging)")
 	// Get ca info
 	// curl https://acme-staging-v02.api.letsencrypt.org/directory
 	ca := CADir{
@@ -453,7 +453,7 @@ func letsencrypt() {
 }
 
 func zerossl() {
-	log.Println("starting zerossl HTTP challenge (statging)")
+	log.Println("starting zerossl HTTP challenge")
 	// Get ca info
 	// curl curl https://acme.zerossl.com/v2/DV90/directory
 	ca := CADir{
