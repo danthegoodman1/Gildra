@@ -8,9 +8,11 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/internal"
 	"github.com/go-redis/redis/v8"
 	"github.com/mailgun/groupcache/v2"
+	"log"
 	"time"
 )
 
@@ -27,6 +29,8 @@ var (
 		opt, _ := redis.ParseURL("redis://default:33584fc0dfa54056b5af3ad060e99918@us1-dominant-antelope-38601.upstash.io:38601")
 		return opt
 	}())
+
+	logger = gologger.NewLogger()
 )
 
 type (
@@ -105,7 +109,22 @@ func GetFQDNConfig(fqdn string) (*FQDNConfig, error) {
 }
 
 func GetFQDNCert(fqdn string) (*tls.Certificate, error) {
-	return nil, nil
+	log.Println("getting cert for fqdn", fqdn)
+	keyString, err := redisClient.Get(context.Background(), "key").Result()
+	if err != nil {
+		return nil, fmt.Errorf("error in redis get: %w", err)
+	}
+	certString, err := redisClient.Get(context.Background(), "cert").Result()
+	if err != nil {
+		return nil, fmt.Errorf("error in redis get: %w", err)
+	}
+
+	config := FQDNConfig{Cert: Cert{
+		CertPEM: certString,
+		KeyPEM:  keyString,
+	}}
+
+	return config.GetCert()
 }
 
 // GetHTTPChallengeToken fetches the HTTP challenge token from the control plane

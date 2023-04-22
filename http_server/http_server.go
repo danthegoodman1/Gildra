@@ -170,13 +170,13 @@ func StartServers() error {
 			fmt.Println("Getting cert for fqdn", fqdn)
 
 			// Load the certificate
-			cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
+			cert, err := control_plane.GetFQDNCert(fqdn)
 			if err != nil {
 				return nil, err
 			}
 
 			internal.Metric_TLSLookups.Inc()
-			return &cert, nil
+			return cert, nil
 		},
 		NextProtos: []string{"h2", "http/1.1", "h3", "h3-29"},
 	}

@@ -482,14 +482,26 @@ func letsencrypt() {
 	if err != nil {
 		log.Fatalf("error writing issuer to disk: %s", err)
 	}
+
 	err = ioutil.WriteFile("key", certResource.PrivateKey, 0666)
 	if err != nil {
 		log.Fatalf("error writing key to disk: %s", err)
 	}
+	cmd = redisClient.Set(context.Background(), "key", string(certResource.PrivateKey), 0)
+	if err := cmd.Err(); err != nil {
+		log.Fatalf("error in redis get: %w", err)
+	}
+	log.Println("stored in redis")
+
 	err = ioutil.WriteFile("cert", certResource.Certificate, 0666)
 	if err != nil {
 		log.Fatalf("error writing cert to disk: %s", err)
 	}
+	cmd = redisClient.Set(context.Background(), "cert", string(certResource.Certificate), 0)
+	if err := cmd.Err(); err != nil {
+		log.Fatalf("error in redis get: %w", err)
+	}
+	log.Println("stored in redis")
 
 	log.Println("done!")
 }
@@ -959,14 +971,26 @@ func zerossl() {
 	if err != nil {
 		log.Fatalf("error writing issuer to disk: %s", err)
 	}
+
 	err = ioutil.WriteFile("key", certResource.PrivateKey, 0666)
 	if err != nil {
 		log.Fatalf("error writing key to disk: %s", err)
 	}
+	cmd = redisClient.Set(context.Background(), "key", string(certResource.PrivateKey), 0)
+	if err := cmd.Err(); err != nil {
+		log.Fatalf("error in redis get: %w", err)
+	}
+	log.Println("stored in redis")
+
 	err = ioutil.WriteFile("cert", certResource.Certificate, 0666)
 	if err != nil {
 		log.Fatalf("error writing cert to disk: %s", err)
 	}
+	cmd = redisClient.Set(context.Background(), "cert", string(certResource.Certificate), 0)
+	if err := cmd.Err(); err != nil {
+		log.Fatalf("error in redis get: %w", err)
+	}
+	log.Println("stored in redis")
 
 	log.Println("done!")
 }
