@@ -7,6 +7,9 @@ env:
 
 tasks:
 
+  default:
+    cmds:
+      - go run .
   docker:
     cmds:
       - docker build . -t gildra:latest --ssh default

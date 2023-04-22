@@ -14,7 +14,7 @@ var (
 	logger     = gologger.NewLogger()
 )
 
-func StartMetricsServer() error {
+func StartServer() error {
 	logger.Debug().Msgf("Starting internal http server on port %s", Env_InternalPort)
 
 	mux := http.NewServeMux()
@@ -24,7 +24,8 @@ func StartMetricsServer() error {
 		Addr:    fmt.Sprintf(":%s", Env_InternalPort),
 		Handler: mux,
 	}
-	return httpServer.ListenAndServe()
+	go httpServer.ListenAndServe()
+	return nil
 }
 
 func Shutdown(ctx context.Context) error {

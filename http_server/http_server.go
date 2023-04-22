@@ -23,7 +23,9 @@ import (
 )
 
 var (
-	logger = gologger.NewLogger()
+	logger     = gologger.NewLogger()
+	httpServer *http.Server
+	h3Server   *http3.Server
 )
 
 const (
@@ -186,38 +188,47 @@ func StartServers() error {
 	listener, _ := net.Listen("tcp", ":80")
 
 	h2cServer := &http2.Server{}
-	server := &http.Server{
+	httpServer = &http.Server{
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		Handler:      h2c.NewHandler(handler, h2cServer),
 	}
 
-	// Configure the server to support HTTP/2
-	err := http2.ConfigureServer(server, nil)
+	// Configure the httpServer to support HTTP/2
+	err := http2.ConfigureServer(httpServer, nil)
 	if err != nil {
 		return fmt.Errorf("error in http2.ConfigureServer: %w", err)
 	}
 
-	h3Server := http3.Server{
+	h3Server = &http3.Server{
 		TLSConfig:  tlsConfig,
 		Handler:    handler,
 		QuicConfig: &quic.Config{},
 		Addr:       ":443",
 	}
 
-	g := &errgroup.Group{}
 	// TODO: Reaplce logs
+	logger.Debug().Msg("Starting httpServer on :80 (HTTP/1.1 and HTTP/2)")
+	go httpServer.Serve(listener)
+	logger.Debug().Msg("Starting httpServer on :443 (HTTP/1.1 and HTTP/2)")
+	go httpServer.Serve(tlsListener)
+	logger.Debug().Msg("Starting httpServer on :443 (HTTP/3)")
+	go h3Server.ListenAndServe()
+	return nil
+}
+
+func Shutdown(ctx context.Context) error {
+	g := errgroup.Group{}
 	g.Go(func() error {
-		fmt.Println("Starting server on :443 (HTTP/1.1 and HTTP/2)")
-		return server.Serve(tlsListener)
+		return httpServer.Shutdown(ctx)
 	})
 	g.Go(func() error {
-		fmt.Println("Starting server on :80 (HTTP/1.1 and HTTP/2)")
-		return server.Serve(listener)
-	})
-	g.Go(func() error {
-		fmt.Println("Starting server on :443 (HTTP/3)")
-		return h3Server.ListenAndServe()
+		delta := time.Second * 5
+		deadline, ok := ctx.Deadline()
+		if ok {
+			delta = time.Now().Sub(deadline)
+		}
+		return h3Server.CloseGracefully(delta)
 	})
 	return g.Wait()
 }
