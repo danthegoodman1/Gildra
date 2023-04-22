@@ -27,7 +27,8 @@ var (
 )
 
 const (
-	ACMEPathPrefix = "/.well-known/acme-challenge/"
+	ACMEPathPrefix    = "/.well-known/acme-challenge/"
+	ZeroSSLPathPrefix = "/.well-known/pki-validation/"
 )
 
 var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +58,26 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		internal.Metric_ACME_HTTP_Challenges.Inc()
+		return
+	} else if strings.HasPrefix(r.URL.Path, ZeroSSLPathPrefix) {
+		fqdn := r.Header.Get("Host")
+		logger.Debug().Msgf("got ZeroSSL HTTP challenge request for FQDN %s", fqdn)
+
+		_, key := path.Split(r.URL.Path)
+		token, err := control_plane.GetHTTPChallengeToken(fqdn, key)
+		if err != nil {
+			logger.Error().Err(err).Msgf("error in GetHTTPChallengeToken for FQDN %s", fqdn)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, err = w.Write([]byte(token))
+		if err != nil {
+			logger.Error().Err(err).Msg("error in writing bytes to response for HTTP ZeroSSL challenge")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		internal.Metric_ZEROSSL_HTTP_Challenges.Inc()
 		return
 	}
 

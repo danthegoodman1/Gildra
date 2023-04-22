@@ -18,4 +18,8 @@ var (
 		Name: "acme_http_challenges",
 		Help: "Successfully answered ACME HTTP challenges",
 	})
+	Metric_ZEROSSL_HTTP_Challenges = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "zerossl_http_challenges",
+		Help: "Successfully answered ZeroSSL HTTP challenges (not ACME)",
+	})
 )
