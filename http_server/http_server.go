@@ -189,8 +189,8 @@ func StartServers() error {
 
 	h2cServer := &http2.Server{}
 	httpServer = &http.Server{
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		ReadTimeout:  0,
+		WriteTimeout: 0,
 		Handler:      h2c.NewHandler(handler, h2cServer),
 	}
 
