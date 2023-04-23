@@ -207,7 +207,6 @@ func StartServers() error {
 		Addr:       ":443",
 	}
 
-	// TODO: Reaplce logs
 	logger.Debug().Msg("Starting httpServer on :80 (HTTP/1.1 and HTTP/2)")
 	go httpServer.Serve(listener)
 	logger.Debug().Msg("Starting httpServer on :443 (HTTP/1.1 and HTTP/2)")
