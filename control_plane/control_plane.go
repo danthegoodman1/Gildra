@@ -43,6 +43,7 @@ type (
 	}
 )
 
+// RegisterCacheHandlers must only be called after groupcache is registered
 func RegisterCacheHandlers() {
 	if registeredHandlers {
 		return
