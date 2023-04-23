@@ -115,7 +115,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
 	w.WriteHeader(http.StatusCreated)
-	fmt.Fprint(w, "Hello world\n")
+	fmt.Fprintf(w, "Hello world, proto: %s\n", r.Proto)
 	return
 })
 
