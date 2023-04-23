@@ -17,9 +17,7 @@ var (
 )
 
 func CreateGroupCache() error {
-	// NOTE: It is important to pass the same peer `http://192.168.1.1:8080` to `NewHTTPPoolOpts`
-	// which is provided to `pool.Set()` so the pool can identify which of the peers is our instance.
-	// The pool will not operate correctly if it can't identify which peer is our instance.
+	logger.Debug().Msgf("creating group cache at %s", SelfAddr)
 
 	// Pool keeps track of peers in our cluster and identifies which peer owns a key.
 	pool := groupcache.NewHTTPPoolOpts("http://"+SelfAddr, &groupcache.HTTPPoolOptions{})

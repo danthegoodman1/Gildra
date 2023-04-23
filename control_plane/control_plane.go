@@ -45,6 +45,7 @@ type (
 
 // RegisterCacheHandlers must only be called after groupcache is registered
 func RegisterCacheHandlers() {
+	logger.Debug().Msg("registering cache handlers")
 	if registeredHandlers {
 		return
 	}
