@@ -524,7 +524,7 @@ func zerossl() {
 		log.Fatalf("error generating private key: %s", err)
 	}
 
-	// make a new account
+	// make a new account - these come from your zerossl account
 	eabKID := "CqpjcupAx53vEWtxD6CIxQ"
 	hmacKey := "yEmhOx4TOp0bBIiHkR-2o2k3E9T7jxTWJ4ESWXLvkgBQqxd68sQqw1H6TF1K-feCSuJz2LdkUYd9qM5mFdfY9A"
 	hmacDecoded, err := base64.RawURLEncoding.DecodeString(hmacKey)
