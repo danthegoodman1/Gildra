@@ -506,6 +506,7 @@ func letsencrypt() {
 	log.Println("done!")
 }
 
+// This should work for google trust services too: https://cloud.google.com/certificate-manager/docs/public-ca-tutorial
 func zerossl() {
 	log.Println("starting zerossl HTTP challenge")
 	// Get ca info
