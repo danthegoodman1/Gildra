@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"github.com/samber/lo"
 	"io"
-	"log"
 	"net/http"
 	"time"
 )
@@ -196,7 +195,7 @@ func CreateChallenge(ctx context.Context, auth Authorization, pk *ecdsa.PrivateK
 	// Construct key authorization (HTTP-01 response)
 	keyAuth, err := GetKeyAuthorization(challenge.Token, pk)
 	if err != nil {
-		log.Fatalf("error getting key authorization: %s", err)
+		return nil, fmt.Errorf("error in GetKeyAuthorization: %w", err)
 	}
 
 	return &ChallengeContent{
