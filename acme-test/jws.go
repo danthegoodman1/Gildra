@@ -1,4 +1,4 @@
-package acme_http
+package main
 
 import (
 	"context"
@@ -49,8 +49,7 @@ type NonceSource struct {
 }
 
 func (ns *NonceSource) Nonce() (string, error) {
-	// TODO: use duration from creation
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", ns.NonceURL, nil)
@@ -63,6 +62,7 @@ func (ns *NonceSource) Nonce() (string, error) {
 		return "", fmt.Errorf("error doing request: %w", err)
 	}
 
+	fmt.Println("getting nonce", res.Header.Get("replay-nonce"), res.StatusCode)
 	return res.Header.Get("replay-nonce"), nil
 }
 

@@ -1,4 +1,4 @@
-package acme_http
+package main
 
 import (
 	"log"

@@ -1,4 +1,4 @@
-package main
+package acme
 
 // Resource represents a CA issued certificate.
 // PrivateKey, Certificate and IssuerCertificate are all

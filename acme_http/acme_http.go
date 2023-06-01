@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/danthegoodman1/Gildra/acme"
 	"github.com/samber/lo"
 	"io"
 	"net/http"
@@ -30,7 +31,7 @@ var (
 	ErrHighStatusCode = errors.New("high status code")
 )
 
-func GetCADir(ctx context.Context, caDirURL string) (*CADir, error) {
+func GetCADir(ctx context.Context, caDirURL string) (*acme.CADir, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", caDirURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error in http.NewRequestWithContext: %w", err)
@@ -49,7 +50,7 @@ func GetCADir(ctx context.Context, caDirURL string) (*CADir, error) {
 		return nil, fmt.Errorf("status %d - body %s - %w", res.StatusCode, string(resBody), ErrHighStatusCode)
 	}
 
-	var caDir CADir
+	var caDir acme.CADir
 	err = json.Unmarshal(resBody, &caDir)
 	if err != nil {
 		return nil, fmt.Errorf("error in unmarshaling CA dir: %w", err)
@@ -58,8 +59,8 @@ func GetCADir(ctx context.Context, caDirURL string) (*CADir, error) {
 	return &caDir, nil
 }
 
-func signedRequest(ctx context.Context, url, kid string, content []byte, pk *ecdsa.PrivateKey, caDir *CADir) (*http.Response, []byte, error) {
-	signed, err := SignContent(url, kid, content, pk, caDir)
+func signedRequest(ctx context.Context, url, kid string, content []byte, pk *ecdsa.PrivateKey, caDir *acme.CADir) (*http.Response, []byte, error) {
+	signed, err := acme.SignContent(url, kid, content, pk, caDir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error signing content: %w", err)
 	}
@@ -85,14 +86,14 @@ func signedRequest(ctx context.Context, url, kid string, content []byte, pk *ecd
 	return res, resBody, nil
 }
 
-func CreateAccount(ctx context.Context, mailTo string, caDir *CADir, eab *EABOptions) (accountKID string, privateKey *ecdsa.PrivateKey, err error) {
+func CreateAccount(ctx context.Context, mailTo string, caDir *acme.CADir, eab *EABOptions) (accountKID string, privateKey *ecdsa.PrivateKey, err error) {
 	privateKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		err = fmt.Errorf("error generating private key: %w", err)
 		return
 	}
 
-	acc := Account{
+	acc := acme.Account{
 		TermsOfServiceAgreed: true,
 		Contact:              []string{fmt.Sprintf("mailto:%s", mailTo)},
 	}
@@ -104,7 +105,7 @@ func CreateAccount(ctx context.Context, mailTo string, caDir *CADir, eab *EABOpt
 			return
 		}
 
-		eabJWS, e := SignEABContent(caDir.NewAccount, eab.KID, hmacDecoded, privateKey)
+		eabJWS, e := acme.SignEABContent(caDir.NewAccount, eab.KID, hmacDecoded, privateKey)
 		if e != nil {
 			err = fmt.Errorf("error signing EAB content: %w", e)
 			return
@@ -130,10 +131,10 @@ func CreateAccount(ctx context.Context, mailTo string, caDir *CADir, eab *EABOpt
 	return res.Header.Get("location"), privateKey, nil
 }
 
-func CreateOrder(ctx context.Context, accountKID, domain string, caDir *CADir, pk *ecdsa.PrivateKey) (orderLocation string, orderResponse ExtendedOrder, err error) {
-	order := ExtendedOrder{
-		Order: Order{
-			Identifiers: []Identifier{
+func CreateOrder(ctx context.Context, accountKID, domain string, caDir *acme.CADir, pk *ecdsa.PrivateKey) (orderLocation string, orderResponse acme.ExtendedOrder, err error) {
+	order := acme.ExtendedOrder{
+		Order: acme.Order{
+			Identifiers: []acme.Identifier{
 				{
 					Type:  "dns",
 					Value: domain, // the domain to get a cert for
@@ -164,13 +165,13 @@ func CreateOrder(ctx context.Context, accountKID, domain string, caDir *CADir, p
 	return
 }
 
-func GetAuthorization(ctx context.Context, accountKID string, pk *ecdsa.PrivateKey, caDir *CADir, orderResp ExtendedOrder) (*Authorization, error) {
+func GetAuthorization(ctx context.Context, accountKID string, pk *ecdsa.PrivateKey, caDir *acme.CADir, orderResp acme.ExtendedOrder) (*acme.Authorization, error) {
 	_, resBody, err := signedRequest(ctx, orderResp.Authorizations[0], accountKID, []byte{}, pk, caDir)
 	if err != nil {
 		return nil, fmt.Errorf("error in signedRequest: %w", err)
 	}
 
-	var auth Authorization
+	var auth acme.Authorization
 	err = json.Unmarshal(resBody, &auth)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshaling response: %w", err)
@@ -184,8 +185,8 @@ type ChallengeContent struct {
 
 var ErrChallengeNotFound = errors.New("challenge not found")
 
-func CreateChallenge(ctx context.Context, auth Authorization, pk *ecdsa.PrivateKey) (*ChallengeContent, error) {
-	challenge, found := lo.Find(auth.Challenges, func(chal Challenge) bool {
+func CreateChallenge(ctx context.Context, auth acme.Authorization, pk *ecdsa.PrivateKey) (*ChallengeContent, error) {
+	challenge, found := lo.Find(auth.Challenges, func(chal acme.Challenge) bool {
 		return chal.Type == "http-01"
 	})
 	if !found {
@@ -193,7 +194,7 @@ func CreateChallenge(ctx context.Context, auth Authorization, pk *ecdsa.PrivateK
 	}
 
 	// Construct key authorization (HTTP-01 response)
-	keyAuth, err := GetKeyAuthorization(challenge.Token, pk)
+	keyAuth, err := acme.GetKeyAuthorization(challenge.Token, pk)
 	if err != nil {
 		return nil, fmt.Errorf("error in GetKeyAuthorization: %w", err)
 	}
@@ -205,13 +206,13 @@ func CreateChallenge(ctx context.Context, auth Authorization, pk *ecdsa.PrivateK
 	}, nil
 }
 
-func NotifyChallenge(ctx context.Context, caDir *CADir, accountKID string, pk *ecdsa.PrivateKey, chal ChallengeContent) (*Challenge, error) {
+func NotifyChallenge(ctx context.Context, caDir *acme.CADir, accountKID string, pk *ecdsa.PrivateKey, chal ChallengeContent) (*acme.Challenge, error) {
 	_, resBody, err := signedRequest(ctx, chal.URL, accountKID, []byte("{}"), pk, caDir)
 	if err != nil {
 		return nil, fmt.Errorf("error in signedRequest: %w", err)
 	}
 
-	var challengeResponse Challenge
+	var challengeResponse acme.Challenge
 	err = json.Unmarshal(resBody, &challengeResponse)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshaling json: %w", err)
@@ -220,7 +221,7 @@ func NotifyChallenge(ctx context.Context, caDir *CADir, accountKID string, pk *e
 	return &challengeResponse, nil
 }
 
-func PollAuthorizationCompleted(ctx context.Context, pollSleep time.Duration, order ExtendedOrder, accountKID string, pk *ecdsa.PrivateKey, caDir *CADir) error {
+func PollAuthorizationCompleted(ctx context.Context, pollSleep time.Duration, order acme.ExtendedOrder, accountKID string, pk *ecdsa.PrivateKey, caDir *acme.CADir) error {
 	for {
 		err := ctx.Err()
 		if err != nil {
@@ -232,13 +233,13 @@ func PollAuthorizationCompleted(ctx context.Context, pollSleep time.Duration, or
 			return fmt.Errorf("error in signedRequest: %w", err)
 		}
 
-		var authResponse Authorization
+		var authResponse acme.Authorization
 		err = json.Unmarshal(resBody, &authResponse)
 		if err != nil {
 			return fmt.Errorf("error in json.Unmarshal: %w", err)
 		}
 
-		valid, err := checkAuthorizationStatus(authResponse)
+		valid, err := acme.CheckAuthorizationStatus(authResponse)
 		if err != nil {
 			return fmt.Errorf("error in checkAuthorizationStatus: %w", err)
 		}
@@ -252,21 +253,21 @@ func PollAuthorizationCompleted(ctx context.Context, pollSleep time.Duration, or
 
 var ErrOrderNotReady = errors.New("order was not ready, would need to wait by going to the orderLocation and wait")
 
-func FinalizeOrder(ctx context.Context, accountKID, domain, orderLocation string, pk *ecdsa.PrivateKey, dir *CADir, pollSleep time.Duration, order ExtendedOrder) (*Resource, error) {
+func FinalizeOrder(ctx context.Context, accountKID, domain, orderLocation string, pk *ecdsa.PrivateKey, dir *acme.CADir, pollSleep time.Duration, order acme.ExtendedOrder) (*acme.Resource, error) {
 
 	csrKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, fmt.Errorf("error in rsa.GenerateKey: %w", err)
 	}
 
-	csr, err := GenerateCSR(csrKey, domain, []string{domain}, false)
+	csr, err := acme.GenerateCSR(csrKey, domain, []string{domain}, false)
 	if err != nil {
 		return nil, fmt.Errorf("error in GenerateCSR: %w", err)
 	}
 
 	pemBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(csrKey)}
 
-	csrMsg := CSRMessage{
+	csrMsg := acme.CSRMessage{
 		Csr: base64.RawURLEncoding.EncodeToString(csr),
 	}
 
@@ -281,7 +282,7 @@ func FinalizeOrder(ctx context.Context, accountKID, domain, orderLocation string
 		return nil, fmt.Errorf("error in signedRequest for finalizing order: %w", err)
 	}
 
-	var fulfilledOrder Order
+	var fulfilledOrder acme.Order
 	err = json.Unmarshal(resBody, &fulfilledOrder)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshaling finalize response: %w", err)
@@ -315,7 +316,7 @@ func FinalizeOrder(ctx context.Context, accountKID, domain, orderLocation string
 		return nil, ErrOrderNotReady
 	}
 
-	return &Resource{
+	return &acme.Resource{
 		Domain:        domain,
 		CertURL:       fulfilledOrder.Certificate,
 		PrivateKey:    pem.EncodeToMemory(pemBlock),
@@ -324,7 +325,7 @@ func FinalizeOrder(ctx context.Context, accountKID, domain, orderLocation string
 	}, nil
 }
 
-func GetCert(ctx context.Context, resource Resource, accountKID string, key *ecdsa.PrivateKey, dir *CADir) (*Resource, error) {
+func GetCert(ctx context.Context, resource acme.Resource, accountKID string, key *ecdsa.PrivateKey, dir *acme.CADir) (*acme.Resource, error) {
 	_, resBody, err := signedRequest(ctx, resource.CertURL, accountKID, []byte{}, key, dir)
 	if err != nil {
 		return nil, fmt.Errorf("error in signedRequest: %w", err)

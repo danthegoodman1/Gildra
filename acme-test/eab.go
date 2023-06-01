@@ -1,4 +1,4 @@
-package acme_http
+package main
 
 import (
 	"crypto/ecdsa"
@@ -10,7 +10,7 @@ func SignEABContent(url, kid string, hmac []byte, privKey *ecdsa.PrivateKey) (*j
 	jwk := jose.JSONWebKey{Key: privKey}
 	jwkJSON, err := jwk.Public().MarshalJSON()
 	if err != nil {
-		return nil, fmt.Errorf("acme: error encoding eab jwk key: %w", err)
+		return nil, fmt.Errorf("acme-test: error encoding eab jwk key: %w", err)
 	}
 
 	signer, err := jose.NewSigner(

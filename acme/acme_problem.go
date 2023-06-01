@@ -1,4 +1,4 @@
-package main
+package acme
 
 import "fmt"
 
@@ -33,7 +33,7 @@ type Identifier struct {
 }
 
 func (p ProblemDetails) Error() string {
-	msg := fmt.Sprintf("acme: error: %d", p.HTTPStatus)
+	msg := fmt.Sprintf("acme-test: error: %d", p.HTTPStatus)
 	if p.Method != "" || p.URL != "" {
 		msg += fmt.Sprintf(" :: %s :: %s", p.Method, p.URL)
 	}
