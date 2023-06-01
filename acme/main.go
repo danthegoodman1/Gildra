@@ -28,7 +28,7 @@ var (
 )
 
 func main() {
-	zerossl()
+	letsencrypt()
 }
 
 func letsencrypt() {
