@@ -241,7 +241,7 @@ func PollAuthorizationCompleted(ctx context.Context, pollSleep time.Duration, or
 
 		valid, err := acme.CheckAuthorizationStatus(authResponse)
 		if err != nil {
-			return fmt.Errorf("error in checkAuthorizationStatus: %w", err)
+			return fmt.Errorf("error in CheckAuthorizationStatus: %w", err)
 		}
 		if valid {
 			return nil
