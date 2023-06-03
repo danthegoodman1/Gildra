@@ -56,6 +56,8 @@ Response Body:
 
 View the routing config spec for more info.
 
+When an error is received, a `500 internal error` will be returned to the original request, and the error will be logged.
+
 ### GET /domain/:domain/cert - get the current certificate for a domain
 
 Gildra uses this endpoint to fetch the routing config when the cache is empty.
@@ -68,12 +70,12 @@ Response Body:
 }
 ```
 
+When an error is received, a `500 internal error` will be returned to the original request, and the error will be logged.
+
 
 ### GET /domain/:domain/challenge/:token - get the challenge token for a domain
 
 For a given HTTP challenge, fetch the key that must be returned. Gildra uses this to complete an incoming HTTP challenge.
-
-Any response with an error status code >=400 will be proxied as the response to the HTTP challenge. 
 
 Request Body:
 ```json
@@ -82,7 +84,9 @@ Request Body:
 }
 ```
 
-## Self-implemented routes
+Any response with an error status code >=400 will be proxied as the response to the HTTP challenge.
+
+## Self-implemented Routes
 
 These routes are not used by Gildra, however a suggested implementation is provided to be consistent with the rest of the API requirements:
 
