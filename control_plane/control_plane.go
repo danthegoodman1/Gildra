@@ -70,7 +70,7 @@ func RegisterCacheHandlers() {
 				return fmt.Errorf("error in json.Marshal for fqdnConf: %w", err)
 			}
 
-			internal.Metric_CacheMissRoutingConfigLookups.Inc()
+			internal.Metric_RoutingConfigCacheFill.Inc()
 
 			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(Env_FQDNCacheSeconds)))
 		},
@@ -102,7 +102,7 @@ func RegisterCacheHandlers() {
 				return fmt.Errorf("error in json.Marshal for tls.Certificate: %w", err)
 			}
 
-			internal.Metric_CacheMissTLSLookups.Inc()
+			internal.Metric_CertCacheFill.Inc()
 
 			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(Env_CertCacheSeconds)))
 		},
@@ -167,6 +167,8 @@ func GetFQDNCert(fqdn string) (*tls.Certificate, error) {
 		CertPEM: resBody.Cert,
 		KeyPEM:  resBody.PrivateKey,
 	}}
+
+	internal.Metric_CertLookups.Inc()
 
 	return config.GetCert()
 }

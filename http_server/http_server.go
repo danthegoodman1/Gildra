@@ -189,7 +189,6 @@ func StartServers() error {
 				return nil, err
 			}
 
-			internal.Metric_CertLookups.Inc()
 			return cert, nil
 		},
 		NextProtos: []string{"h2", "http/1.1", "h3", "h3-29"},
