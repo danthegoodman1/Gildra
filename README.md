@@ -68,8 +68,18 @@ This works especially well because the groupcache package not only already handl
 
 As a result, after we load the cert into the request handler and go to look up the routing config, we've already started fetching it and save that much time. Often it's ready in cache once we go to look it up!
 
-## Why not support TCP (TLS) traffic?
+## FAQs
+
+### Why not support TCP (TLS) traffic?
 
 While this wouldn't be too difficult to add, it does require a decent change in request handling architecture and configurability. Additionally, most services that use TCP directly such as databases prefer to be the managers of certificates and encrypted traffic (just see the warnings that happen when you run them without!), and are not multi-tenant in the same way a web service might be.
 
 TL;DR we wanted to start simple, and hit the majority of uses cases.
+
+### Why support the HTTP-01 challenge?
+
+It requires the least amount of involvement from end-users. They only have to make a single `A` or `CNAME` DNS record for base domains or subdomains.
+
+With the DNS-01 challenge, they must delegate the ACME challenge to the hosting provider as a second DNS record. If they ever remove this record, then you are unable to manage certs for them. If they ever change the `A` or `CNAME` record it will be _very obvious very fast_ that they've broken something.
+
+You can still use Gildra with DNS-01 challenge certs though! For example if you wanted to support wildcard subdomains. However, Gildra won't handle the challenge for you.
