@@ -32,21 +32,14 @@ This is configured in Gildra as the required `CP_AUTH` env var.
 
 ## Required Routes
 
-The control plane must implement the following endpoints that are used by Gildra. All request and response bodies are JSON.
+The control plane must implement the following endpoints that are used by Gildra.
 
-Any unspecified response body will take the format:
-```json
-{
-  "Msg": "ok"
-}
-```
+Successful requests should return a `2XX` status code and JSON body, anything else will be considered an error.
 
-Any error status code will have the following body schema:
-```json
-{
-  "Err": "error message" 
-}
-```
+Any unspecified response body is not read, and therefore response body content is not required by Gildra.
+
+
+Any error status code must return a text body, which will be printed in the error logs by Gildra.
 
 ### GET /domain/:domain/config - fetch a routing config for a domain
 
