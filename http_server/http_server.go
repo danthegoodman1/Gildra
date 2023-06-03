@@ -29,8 +29,9 @@ var (
 )
 
 const (
-	ACMEPathPrefix    = "/.well-known/acme-test-challenge/"
-	ZeroSSLPathPrefix = "/.well-known/pki-validation/"
+	ACMETestPathPrefix = "/.well-known/acme-test-challenge/"
+	ACMEPathPrefix     = "/.well-known/acme-challenge/"
+	ZeroSSLPathPrefix  = "/.well-known/pki-validation/"
 )
 
 var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +42,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Headers:", r.Header)
 
 	// Check for an ACME challenge
-	if strings.HasPrefix(r.URL.Path, ACMEPathPrefix) {
+	if strings.HasPrefix(r.URL.Path, ACMEPathPrefix) || strings.HasPrefix(r.URL.Path, ACMETestPathPrefix) {
 		fqdn := r.Header.Get("Host")
 		logger.Debug().Msgf("got ACME HTTP challenge request for FQDN %s", fqdn)
 
