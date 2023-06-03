@@ -10,9 +10,12 @@ import (
 	"fmt"
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/internal"
+	"github.com/danthegoodman1/Gildra/utils"
 	"github.com/go-redis/redis/v8"
 	"github.com/mailgun/groupcache/v2"
+	"io"
 	"log"
+	"net/http"
 	"time"
 )
 
@@ -110,20 +113,37 @@ func GetFQDNConfig(fqdn string) (*FQDNConfig, error) {
 	return nil, nil
 }
 
+type GetCertRes struct {
+	Cert       string
+	PrivateKey string
+}
+
 func GetFQDNCert(fqdn string) (*tls.Certificate, error) {
 	log.Println("getting cert for fqdn", fqdn)
-	keyString, err := redisClient.Get(context.Background(), "key").Result()
+	req, err := http.NewRequestWithContext(context.Background(), "GET", utils.Env_ControlPlaneAddr+"/cert?domain="+fqdn, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error in redis get: %w", err)
+		return nil, fmt.Errorf("error creating new request: %w", err)
 	}
-	certString, err := redisClient.Get(context.Background(), "cert").Result()
+
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error in redis get: %w", err)
+		return nil, fmt.Errorf("error doing request: %w", err)
+	}
+	defer res.Body.Close()
+	resBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading body: %w", err)
+	}
+
+	var resBody GetCertRes
+	err = json.Unmarshal(resBytes, &resBody)
+	if err != nil {
+		return nil, fmt.Errorf("error in Unmarshal: %w", err)
 	}
 
 	config := FQDNConfig{Cert: Cert{
-		CertPEM: certString,
-		KeyPEM:  keyString,
+		CertPEM: resBody.Cert,
+		KeyPEM:  resBody.PrivateKey,
 	}}
 
 	return config.GetCert()
@@ -132,11 +152,22 @@ func GetFQDNCert(fqdn string) (*tls.Certificate, error) {
 // GetHTTPChallengeToken fetches the HTTP challenge token from the control plane
 // to fulfil the HTTP ACME challenge.
 func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
-	token, err := redisClient.Get(context.Background(), idToken).Result()
+	req, err := http.NewRequestWithContext(context.Background(), "GET", utils.Env_ControlPlaneAddr+"/cert/token?token="+idToken, nil)
 	if err != nil {
-		return "", fmt.Errorf("error in redis get: %w", err)
+		return "", fmt.Errorf("error creating new request: %w", err)
 	}
-	return token, nil
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("error doing request: %w", err)
+	}
+	defer res.Body.Close()
+	resBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading body: %w", err)
+	}
+
+	return string(resBytes), nil
 }
 
 func (c *FQDNConfig) GetCert() (*tls.Certificate, error) {
