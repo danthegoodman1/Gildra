@@ -94,26 +94,26 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	if r.Header.Get("Connection") == "Upgrade" {
 		fmt.Println("Handling a websocket connection", r.Header.Get("Connection"), r.Header.Get("Upgrade"))
-	}
-	//req, err := http.NewRequestWithContext(context.Background(), r.Method, "http://demo.piesocket.com/v3/channel_123?api_key=VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV&notify_self", r.Body)
-	req, err := http.NewRequestWithContext(context.Background(), r.Method, "http://websockets.chilkat.io/wsChilkatEcho.ashx", r.Body)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	// Fix the host header from the copy
-	ogHost := req.Header.Get("Host")
-	req.Header = r.Header
-	req.Header.Set("Host", ogHost)
+		//req, err := http.NewRequestWithContext(context.Background(), r.Method, "http://demo.piesocket.com/v3/channel_123?api_key=VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV&notify_self", r.Body)
+		req, err := http.NewRequestWithContext(context.Background(), r.Method, "http://websockets.chilkat.io/wsChilkatEcho.ashx", r.Body)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		// Fix the host header from the copy
+		ogHost := req.Header.Get("Host")
+		req.Header = r.Header
+		req.Header.Set("Host", ogHost)
 
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Fatalln(err)
-	}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Fatalln(err)
+		}
 
-	if res.StatusCode == http.StatusSwitchingProtocols {
-		fmt.Println("Switching protocols response")
-		handleUpgradeResponse(w, req, res)
-		return
+		if res.StatusCode == http.StatusSwitchingProtocols {
+			fmt.Println("Switching protocols response")
+			handleUpgradeResponse(w, req, res)
+			return
+		}
 	}
 
 	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
