@@ -35,6 +35,8 @@ const (
 )
 
 var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	internal.Metric_OpenConnections.Inc()
+	defer internal.Metric_OpenConnections.Dec()
 	if upgradeHeader := r.Header.Get("Upgrade"); upgradeHeader == "h2c" {
 		r.Proto = "HTTP/2.0"
 	}
@@ -124,24 +126,28 @@ func handleUpgradeResponse(rw http.ResponseWriter, req *http.Request, res *http.
 	if req.Header.Get("Upgrade") != res.Header.Get("Upgrade") {
 		log.Fatalln("mismatched upgrade headers")
 	}
-	hj, ok := rw.(http.Hijacker)
-	if !ok {
-		log.Fatalln("failed to cast responsewriter to hijacker")
-		return
-	}
+
 	backConn, ok := res.Body.(io.ReadWriteCloser)
 	if !ok {
 		log.Fatalln("failed to cast response body to readwritecloser")
 		return
 	}
 	defer backConn.Close()
+
+	hj, ok := rw.(http.Hijacker)
+	if !ok {
+		log.Fatalln("failed to cast responsewriter to hijacker")
+		return
+	}
+
 	conn, brw, err := hj.Hijack()
 	if err != nil {
 		log.Fatalf("Failed to hijack: %s\n", err)
 		return
 	}
 	defer conn.Close()
-	res.Body = nil // so res.Write only writes the headers; we have res.Body in backConn above
+
+	res.Body = nil // res.Write only writes the headers; we have res.Body in backConn above
 	if err := res.Write(brw); err != nil {
 		log.Fatalf("Failed to write headers: %s\n", err)
 		return
@@ -150,11 +156,16 @@ func handleUpgradeResponse(rw http.ResponseWriter, req *http.Request, res *http.
 		log.Fatalf("Failed to flush headers: %s\n", err)
 		return
 	}
-	errc := make(chan error, 1)
+
 	spc := switchProtocolCopier{user: conn, backend: backConn}
-	go spc.copyToBackend(errc)
-	go spc.copyFromBackend(errc)
-	err = <-errc
+	g := errgroup.Group{}
+	g.Go(spc.copyToBackend)
+	g.Go(spc.copyFromBackend)
+
+	internal.Metric_OpenWebSockets.Inc()
+	defer internal.Metric_OpenWebSockets.Dec()
+
+	err = g.Wait()
 	if err != nil {
 		fmt.Printf("Error with websocket: %s\n", err)
 	} else {
@@ -178,7 +189,7 @@ func StartServers() error {
 				return nil, err
 			}
 
-			internal.Metric_TLSLookups.Inc()
+			internal.Metric_CertLookups.Inc()
 			return cert, nil
 		},
 		NextProtos: []string{"h2", "http/1.1", "h3", "h3-29"},

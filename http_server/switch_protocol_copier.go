@@ -10,12 +10,12 @@ type switchProtocolCopier struct {
 	user, backend io.ReadWriter
 }
 
-func (c switchProtocolCopier) copyFromBackend(errc chan<- error) {
+func (c switchProtocolCopier) copyFromBackend() error {
 	_, err := io.Copy(c.user, c.backend)
-	errc <- err
+	return err
 }
 
-func (c switchProtocolCopier) copyToBackend(errc chan<- error) {
+func (c switchProtocolCopier) copyToBackend() error {
 	_, err := io.Copy(c.backend, c.user)
-	errc <- err
+	return err
 }

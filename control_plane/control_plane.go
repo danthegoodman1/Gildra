@@ -190,7 +190,7 @@ func GetFQDNCertForReal(ctx context.Context, fqdn string) (*tls.Certificate, err
 		return nil, fmt.Errorf("error in cert.GetCert(): %w", err)
 	}
 
-	internal.Metric_RoutingConfigLookups.Inc()
+	internal.Metric_CertLookups.Inc()
 	return c, nil
 }
 
