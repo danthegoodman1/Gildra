@@ -4,6 +4,20 @@ Gildra interfaces with a control plane that has a standard HTTP interface. This 
 
 A dev/testing control plane written in Go is available at [https://github.com/danthegoodman1/GildraControlPlaneExample](https://github.com/danthegoodman1/GildraControlPlaneExample)
 
+<!-- TOC -->
+* [Gildra Control Plane](#gildra-control-plane)
+  * [Auth](#auth)
+  * [Routes](#routes)
+    * [GET /domain/:domain/config - fetch a routing config for a domain](#get-domaindomainconfig---fetch-a-routing-config-for-a-domain)
+    * [GET /domain/:domain/cert - get the current certificate for a domain](#get-domaindomaincert---get-the-current-certificate-for-a-domain)
+    * [GET /domain/:domain/challenge/:token - get the challenge token for a domain](#get-domaindomainchallengetoken---get-the-challenge-token-for-a-domain)
+  * [Self-implemented routes](#self-implemented-routes)
+    * [PUT /domain/:domain/config - set a routing config for a domain](#put-domaindomainconfig---set-a-routing-config-for-a-domain)
+    * [DELETE /domain/:domain/config - delete a routing config for a domain](#delete-domaindomainconfig---delete-a-routing-config-for-a-domain)
+    * [POST /domain/:domain/cert - create/renew a certificate for a domain](#post-domaindomaincert---createrenew-a-certificate-for-a-domain)
+    * [DELETE /domain/:domain/cert - delete the current certificate for a domain](#delete-domaindomaincert---delete-the-current-certificate-for-a-domain)
+<!-- TOC -->
+
 ## Auth
 
 The control plane should expect a bearer token to be present in the incoming `Authorization` header.
