@@ -7,7 +7,7 @@ A dev/testing control plane written in Go is available at [https://github.com/da
 <!-- TOC -->
 * [Gildra Control Plane](#gildra-control-plane)
   * [Auth](#auth)
-  * [Routes](#routes)
+  * [Required Routes](#required-routes)
     * [GET /domain/:domain/config - fetch a routing config for a domain](#get-domaindomainconfig---fetch-a-routing-config-for-a-domain)
     * [GET /domain/:domain/cert - get the current certificate for a domain](#get-domaindomaincert---get-the-current-certificate-for-a-domain)
     * [GET /domain/:domain/challenge/:token - get the challenge token for a domain](#get-domaindomainchallengetoken---get-the-challenge-token-for-a-domain)
@@ -30,9 +30,9 @@ Authorization: Bearer somesupersecrettoken
 
 This is configured in Gildra as the required `CP_AUTH` env var.
 
-## Routes
+## Required Routes
 
-The control plane must implement the following endpoints. All request and response bodies are JSON.
+The control plane must implement the following endpoints that are used by Gildra. All request and response bodies are JSON.
 
 Any unspecified response body will take the format:
 ```json
