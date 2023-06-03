@@ -152,6 +152,7 @@ func GetFQDNCert(fqdn string) (*tls.Certificate, error) {
 // GetHTTPChallengeToken fetches the HTTP challenge token from the control plane
 // to fulfil the HTTP ACME challenge.
 func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
+	log.Println("getting http challenge token")
 	req, err := http.NewRequestWithContext(context.Background(), "GET", utils.Env_ControlPlaneAddr+"/cert/token?token="+idToken, nil)
 	if err != nil {
 		return "", fmt.Errorf("error creating new request: %w", err)
