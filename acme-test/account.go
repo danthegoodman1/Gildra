@@ -1,4 +1,4 @@
-package acme
+package main
 
 import (
 	"encoding/json"

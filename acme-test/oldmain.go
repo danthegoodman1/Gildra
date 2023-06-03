@@ -55,7 +55,7 @@ func oldmain() {
 
 	log.Println("signed content!")
 
-	log.Printf("acme: Registering account for %s", "danthegoodmanae@icloud.com")
+	log.Printf("acme-test: Registering account for %s", "danthegoodmanae@icloud.com")
 
 	req, err := http.NewRequest("POST", ca.NewAccount, bytes.NewReader([]byte(signed.FullSerialize())))
 	if err != nil {
@@ -199,7 +199,7 @@ func oldmain() {
 		log.Fatalf("error getting key authorization: %s", err)
 	}
 
-	// at the `domain`, present the `keyAuth` at /.well-known/acme-challenge/{challenge.Token}
+	// at the `domain`, present the `keyAuth` at /.well-known/acme-test-challenge/{challenge.Token}
 
 	log.Printf("presenting '%s' at http://%s/.well-known/acme-challenge/%s", keyAuth, domain, challenge.Token)
 
@@ -215,7 +215,7 @@ func oldmain() {
 	}()
 
 	// ---------------------------------------------------------------------------
-	// Tell acme server to check the challenge, and validate
+	// Tell acme-test server to check the challenge, and validate
 	// ---------------------------------------------------------------------------
 
 	signed, err = SignContent(challenge.URL, location, []byte("{}"), privateKey, &ca)

@@ -13,6 +13,12 @@ tasks:
   docker:
     cmds:
       - docker build . -t gildra:latest --ssh default
+  single-test:
+    cmds:
+      - go test --count=1 -v {{.CLI_ARGS}}
+      # task single-test -- ./emailing -run TestSendEmail
+      # - go test --count=1 -v ./... -run {{.CLI_ARGS}}
+      # task single-test -- TestName
   linux_amd:
     cmds:
       - GOOS=linux GOARCH=amd64 go build .

@@ -1,4 +1,4 @@
-package acme
+package main
 
 import (
 	"errors"
@@ -55,7 +55,7 @@ type Authorization struct {
 	Wildcard bool `json:"wildcard,omitempty"`
 }
 
-func CheckAuthorizationStatus(authz Authorization) (bool, error) {
+func checkAuthorizationStatus(authz Authorization) (bool, error) {
 	switch authz.Status {
 	case StatusValid:
 		return true, nil

@@ -29,7 +29,7 @@ var (
 )
 
 const (
-	ACMEPathPrefix    = "/.well-known/acme-challenge/"
+	ACMEPathPrefix    = "/.well-known/acme-test-challenge/"
 	ZeroSSLPathPrefix = "/.well-known/pki-validation/"
 )
 

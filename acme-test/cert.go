@@ -1,4 +1,4 @@
-package acme
+package main
 
 // RawCertificate raw data of a certificate.
 type RawCertificate struct {
