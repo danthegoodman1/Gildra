@@ -3,6 +3,7 @@ package acme_http
 import (
 	"context"
 	"log"
+	"os"
 	"testing"
 	"time"
 )
@@ -85,8 +86,8 @@ func TestZeroSSL(t *testing.T) {
 	//log.Println(spew.Sdump(p.caDir))
 
 	acctKid, pk, err := CreateAccount(ctx, "deftesting@icloud.com", caDir, &EABOptions{
-		KID:     "CqpjcupAx53vEWtxD6CIxQ",
-		HMACKey: "yEmhOx4TOp0bBIiHkR-2o2k3E9T7jxTWJ4ESWXLvkgBQqxd68sQqw1H6TF1K-feCSuJz2LdkUYd9qM5mFdfY9A",
+		KID:     os.Getenv("ZEROSSL_KID"),
+		HMACKey: os.Getenv("ZEROSSL_HMAC"),
 	})
 	if err != nil {
 		t.Fatal(err)
