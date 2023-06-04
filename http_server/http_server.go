@@ -107,33 +107,52 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Header.Get("Connection") == "Upgrade" {
+	if dest.DEVTextResponse {
+		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprintf(w, "DEV response\n\tproto: %s\n", r.Proto)
+		return
+	}
+
+	// Proxy the request
+	originReq, err := http.NewRequestWithContext(context.Background(), r.Method, "http://websockets.chilkat.io/wsChilkatEcho.ashx", r.Body)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// TODO: add headers
+	// Switch in the headers, but keep original Host head
+	ogHost := originReq.Header.Get("Host")
+	originReq.Header = r.Header
+	originReq.Header.Set("Host", ogHost)
+
+	originRes, err := http.DefaultClient.Do(originReq)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer originRes.Body.Close()
+
+	if r.Header.Get("Connection") == "Upgrade" && originRes.StatusCode == http.StatusSwitchingProtocols {
+		// Websocket
 		fmt.Println("Handling a websocket connection", r.Header.Get("Connection"), r.Header.Get("Upgrade"))
-		//req, err := http.NewRequestWithContext(context.Background(), r.Method, "http://demo.piesocket.com/v3/channel_123?api_key=VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV&notify_self", r.Body)
-		req, err := http.NewRequestWithContext(context.Background(), r.Method, "http://websockets.chilkat.io/wsChilkatEcho.ashx", r.Body)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		// Fix the host header from the copy
-		ogHost := req.Header.Get("Host")
-		req.Header = r.Header
-		req.Header.Set("Host", ogHost)
+		handleUpgradeResponse(w, originReq, originRes)
+		return
+	}
 
-		res, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		if res.StatusCode == http.StatusSwitchingProtocols {
-			fmt.Println("Switching protocols response")
-			handleUpgradeResponse(w, req, res)
-			return
+	// Copy the headers
+	w.WriteHeader(originRes.StatusCode)
+	for key, vals := range originRes.Header {
+		for _, val := range vals {
+			w.Header().Add(key, val)
 		}
 	}
 
-	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
-	w.WriteHeader(http.StatusCreated)
-	fmt.Fprintf(w, "Hello world, proto: %s\n", r.Proto)
+	// Pump the body
+	_, err = io.Copy(w, originRes.Body)
+	if err != nil {
+		logger.Error().Err(err).Msg("error copying body from origin to client, this request is pretty broken at this point and the client will probably fail due to mismatched headers and body content")
+	}
+
 	return
 })
 
