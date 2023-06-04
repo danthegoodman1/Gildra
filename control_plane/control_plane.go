@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/internal"
+	"github.com/danthegoodman1/Gildra/routing"
 	"github.com/danthegoodman1/Gildra/utils"
 	"github.com/go-redis/redis/v8"
 	"github.com/mailgun/groupcache/v2"
@@ -40,9 +41,6 @@ var (
 )
 
 type (
-	FQDNConfig struct {
-		Cert Cert
-	}
 	Cert struct {
 		CertPEM string
 		KeyPEM  string
@@ -110,7 +108,7 @@ func RegisterCacheHandlers() {
 	registeredHandlers = true
 }
 
-func getFQDNConfigFromCP(fqdn string) (*FQDNConfig, error) {
+func getFQDNConfigFromCP(fqdn string) (*routing.Config, error) {
 	return nil, nil
 }
 
@@ -118,14 +116,14 @@ func getFQDNCertFromCP(fqdn string) (*Cert, error) {
 	return nil, nil
 }
 
-func GetFQDNConfig(ctx context.Context, fqdn string) (*FQDNConfig, error) {
+func GetFQDNConfig(ctx context.Context, fqdn string) (*routing.Config, error) {
 	var b []byte
 	err := FQDNGroupCache.Get(ctx, fqdn, groupcache.AllocatingByteSliceSink(&b))
 	if err != nil {
 		return nil, fmt.Errorf("error getting from groupcache: %w", err)
 	}
 
-	var config FQDNConfig
+	var config routing.Config
 	err = json.Unmarshal(b, &config)
 	if err != nil {
 		return nil, fmt.Errorf("error in json.Unmarshal: %w", err)
@@ -163,14 +161,14 @@ func GetFQDNCert(fqdn string) (*tls.Certificate, error) {
 		return nil, fmt.Errorf("error in Unmarshal: %w", err)
 	}
 
-	config := FQDNConfig{Cert: Cert{
+	c := Cert{
 		CertPEM: resBody.Cert,
 		KeyPEM:  resBody.PrivateKey,
-	}}
+	}
 
 	internal.Metric_CertLookups.Inc()
 
-	return config.GetCert()
+	return c.GetCert()
 }
 
 func GetFQDNCertForReal(ctx context.Context, fqdn string) (*tls.Certificate, error) {
@@ -216,32 +214,6 @@ func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
 	}
 
 	return string(resBytes), nil
-}
-
-func (c *FQDNConfig) GetCert() (*tls.Certificate, error) {
-	certDERBlock, _ := pem.Decode([]byte(c.Cert.CertPEM))
-	if certDERBlock == nil {
-		return nil, fmt.Errorf("error decoding CertPEM: %w", ErrDecoding)
-	}
-	cert, err := x509.ParseCertificate(certDERBlock.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing decoded cert block: %w", err)
-	}
-
-	keyDERBlock, _ := pem.Decode([]byte(c.Cert.KeyPEM))
-	if keyDERBlock == nil {
-		return nil, fmt.Errorf("error decoding KeyPEM: %w", ErrDecoding)
-	}
-	key, err := x509.ParsePKCS1PrivateKey(keyDERBlock.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing decoded key block: %w", err)
-	}
-
-	certificate := tls.Certificate{
-		Certificate: [][]byte{cert.Raw},
-		PrivateKey:  key,
-	}
-	return &certificate, nil
 }
 
 func (c *Cert) GetCert() (*tls.Certificate, error) {

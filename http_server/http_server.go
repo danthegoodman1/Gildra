@@ -44,8 +44,8 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Headers:", r.Header)
 
 	// Check for an ACME challenge
+	fqdn := r.Header.Get("Host")
 	if strings.HasPrefix(r.URL.Path, ACMEPathPrefix) || strings.HasPrefix(r.URL.Path, ACMETestPathPrefix) {
-		fqdn := r.Header.Get("Host")
 		logger.Debug().Msgf("got ACME HTTP challenge request for FQDN %s", fqdn)
 
 		_, key := path.Split(r.URL.Path)
@@ -68,7 +68,6 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		internal.Metric_ACME_HTTP_Challenges.Inc()
 		return
 	} else if strings.HasPrefix(r.URL.Path, ZeroSSLPathPrefix) {
-		fqdn := r.Header.Get("Host")
 		logger.Debug().Msgf("got ZeroSSL HTTP challenge request for FQDN %s", fqdn)
 
 		_, key := path.Split(r.URL.Path)
@@ -89,6 +88,22 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Println("wrote response", token)
 		internal.Metric_ZEROSSL_HTTP_Challenges.Inc()
+		return
+	}
+
+	// TODO: Make timeout customizable
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	config, err := control_plane.GetFQDNConfig(ctx, fqdn)
+	if err != nil {
+		handlingError(w, r, err, "error in control_plane.GetFQDNConfig")
+		return
+	}
+
+	dest, err := config.MatchDestination(r)
+	if err != nil {
+		handlingError(w, r, err, "error in config.MatchDestination")
 		return
 	}
 
@@ -241,4 +256,14 @@ func Shutdown(ctx context.Context) error {
 		return h3Server.CloseGracefully(delta)
 	})
 	return g.Wait()
+}
+
+// handles writing the error, should always return after calling this
+func handlingError(w http.ResponseWriter, r *http.Request, e error, msg string) {
+	logger.Error().Err(e).Msg(msg)
+	w.WriteHeader(http.StatusInternalServerError)
+	_, err := fmt.Fprint(w, "internal error")
+	if err != nil {
+		logger.Error().Err(err).Msg("error writing internal error to HTTP request")
+	}
 }

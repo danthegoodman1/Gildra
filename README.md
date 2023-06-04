@@ -74,6 +74,8 @@ As a result, after we load the cert into the request handler and go to look up t
 
 While this wouldn't be too difficult to add, it does require a decent change in request handling architecture and configurability. Additionally, most services that use TCP directly such as databases prefer to be the managers of certificates and encrypted traffic (just see the warnings that happen when you run them without!), and are not multi-tenant in the same way a web service might be.
 
+We also wanted the ability to support L7 configuration options like headers, routing, and more.
+
 TL;DR we wanted to start simple, and hit the majority of uses cases.
 
 ### Why support the HTTP-01 challenge?
