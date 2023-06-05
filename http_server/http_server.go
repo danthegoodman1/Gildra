@@ -42,9 +42,10 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("Proto:", r.Proto)
 	fmt.Println("Headers:", r.Header)
+	fmt.Println("Host:", r.Host)
 
 	// Check for an ACME challenge
-	fqdn := r.Header.Get("Host")
+	fqdn := r.Host
 	if strings.HasPrefix(r.URL.Path, ACMEPathPrefix) || strings.HasPrefix(r.URL.Path, ACMETestPathPrefix) {
 		logger.Debug().Msgf("got ACME HTTP challenge request for FQDN %s", fqdn)
 
@@ -121,10 +122,9 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: add headers
-	// Switch in the headers, but keep original Host head
-	ogHost := originReq.Header.Get("Host")
-	originReq.Header = r.Header
-	originReq.Header.Set("Host", ogHost)
+	// Switch in the headers, but keep original Host
+	originReq.Header = r.Header.Clone()
+	originReq.Host = fqdn // Forward the host
 
 	originRes, err := http.DefaultClient.Do(originReq)
 	if err != nil {

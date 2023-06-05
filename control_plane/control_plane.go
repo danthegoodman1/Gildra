@@ -117,6 +117,20 @@ func getFQDNCertFromCP(fqdn string) (*Cert, error) {
 }
 
 func GetFQDNConfig(ctx context.Context, fqdn string) (*routing.Config, error) {
+	return &routing.Config{Rules: []routing.Rule{
+		{
+			Matches: []routing.Match{
+				{
+					Destinations: []routing.Destination{
+						{
+							DEVTextResponse: true,
+						},
+					},
+				},
+			},
+		},
+	}}, nil
+
 	var b []byte
 	err := FQDNGroupCache.Get(ctx, fqdn, groupcache.AllocatingByteSliceSink(&b))
 	if err != nil {
