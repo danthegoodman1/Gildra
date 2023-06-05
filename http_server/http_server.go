@@ -118,7 +118,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Proxy the request
-	originReq, err := http.NewRequestWithContext(context.Background(), r.Method, "http://websockets.chilkat.io/wsChilkatEcho.ashx", r.Body)
+	originReq, err := http.NewRequestWithContext(context.Background(), r.Method, dest.URL, r.Body)
 	if err != nil {
 		log.Fatalln(err)
 	}
