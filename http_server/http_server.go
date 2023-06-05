@@ -93,7 +93,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: Make timeout customizable
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
 
 	config, err := control_plane.GetFQDNConfig(ctx, fqdn)
