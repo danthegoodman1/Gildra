@@ -109,11 +109,57 @@ func RegisterCacheHandlers() {
 }
 
 func getFQDNConfigFromCP(fqdn string) (*routing.Config, error) {
-	return nil, nil
+	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domain/%s/config", utils.Env_ControlPlaneAddr, fqdn), nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new request: %w", err)
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error doing request: %w", err)
+	}
+	defer res.Body.Close()
+	resBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading body: %w", err)
+	}
+
+	var resBody routing.Config
+	err = json.Unmarshal(resBytes, &resBody)
+	if err != nil {
+		return nil, fmt.Errorf("error in Unmarshal: %w", err)
+	}
+
+	return &resBody, nil
 }
 
 func getFQDNCertFromCP(fqdn string) (*Cert, error) {
-	return nil, nil
+	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domain/%s/cert", utils.Env_ControlPlaneAddr, fqdn), nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new request: %w", err)
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error doing request: %w", err)
+	}
+	defer res.Body.Close()
+	resBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading body: %w", err)
+	}
+
+	var resBody GetCertRes
+	err = json.Unmarshal(resBytes, &resBody)
+	if err != nil {
+		return nil, fmt.Errorf("error in Unmarshal: %w", err)
+	}
+
+	c := Cert{
+		CertPEM: resBody.Cert,
+		KeyPEM:  resBody.Key,
+	}
+	return &c, nil
 }
 
 func GetFQDNConfig(ctx context.Context, fqdn string) (*routing.Config, error) {
@@ -148,44 +194,11 @@ func GetFQDNConfig(ctx context.Context, fqdn string) (*routing.Config, error) {
 }
 
 type GetCertRes struct {
-	Cert       string
-	PrivateKey string
+	Cert string
+	Key  string
 }
 
-func GetFQDNCert(fqdn string) (*tls.Certificate, error) {
-	log.Println("getting cert for fqdn", fqdn)
-	req, err := http.NewRequestWithContext(context.Background(), "GET", utils.Env_ControlPlaneAddr+"/cert?domain="+fqdn, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error creating new request: %w", err)
-	}
-
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error doing request: %w", err)
-	}
-	defer res.Body.Close()
-	resBytes, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading body: %w", err)
-	}
-
-	var resBody GetCertRes
-	err = json.Unmarshal(resBytes, &resBody)
-	if err != nil {
-		return nil, fmt.Errorf("error in Unmarshal: %w", err)
-	}
-
-	c := Cert{
-		CertPEM: resBody.Cert,
-		KeyPEM:  resBody.PrivateKey,
-	}
-
-	internal.Metric_CertLookups.Inc()
-
-	return c.GetCert()
-}
-
-func GetFQDNCertForReal(ctx context.Context, fqdn string) (*tls.Certificate, error) {
+func GetFQDNCert(ctx context.Context, fqdn string) (*tls.Certificate, error) {
 	log.Println("getting cert for fqdn", fqdn)
 	var b []byte
 	err := CertGroupCache.Get(ctx, fqdn, groupcache.AllocatingByteSliceSink(&b))
@@ -208,11 +221,15 @@ func GetFQDNCertForReal(ctx context.Context, fqdn string) (*tls.Certificate, err
 	return c, nil
 }
 
+type ChallengeTokenRes struct {
+	Key string
+}
+
 // GetHTTPChallengeToken fetches the HTTP challenge token from the control plane
 // to fulfil the HTTP ACME challenge.
 func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
 	log.Println("getting http challenge token")
-	req, err := http.NewRequestWithContext(context.Background(), "GET", utils.Env_ControlPlaneAddr+"/cert/token?token="+idToken, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domain/%s/challenge/%s", utils.Env_ControlPlaneAddr, fqdn, idToken), nil)
 	if err != nil {
 		return "", fmt.Errorf("error creating new request: %w", err)
 	}
@@ -227,7 +244,13 @@ func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
 		return "", fmt.Errorf("error reading body: %w", err)
 	}
 
-	return string(resBytes), nil
+	var resBody ChallengeTokenRes
+	err = json.Unmarshal(resBytes, &resBody)
+	if err != nil {
+		return "", fmt.Errorf("error in Unmarshal: %w", err)
+	}
+
+	return resBody.Key, nil
 }
 
 func (c *Cert) GetCert() (*tls.Certificate, error) {
