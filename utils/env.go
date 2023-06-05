@@ -10,4 +10,7 @@ var (
 	Env_ControlPlaneAddr       = os.Getenv("CP_ADDR")
 	Env_ControlPlaneAuthHeader = os.Getenv("CP_AUTH")
 	Env_FetchCertConcurrently  = os.Getenv("CONCURRENT_FETCH_ROUTING_CONFIG") == "" || os.Getenv("CONCURRENT_FETCH_ROUTING_CONFIG") == "1"
+
+	// Disables setting the host header so the HTTP client sets it automatically, so forwarding localhost works with clients
+	Env_DevDisableHost = os.Getenv("DEV_DISABLE_HOST") == "1"
 )

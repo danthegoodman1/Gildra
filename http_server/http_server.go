@@ -2,10 +2,12 @@ package http_server
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/danthegoodman1/Gildra/control_plane"
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/internal"
+	"github.com/danthegoodman1/Gildra/utils"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/samber/lo"
@@ -111,6 +113,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if dest.DEVTextResponse {
+		logger.Debug().Msg("dev response, writing text")
 		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, "DEV response\n\tproto: %s\n", r.Proto)
@@ -120,16 +123,22 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	// Proxy the request
 	originReq, err := http.NewRequestWithContext(context.Background(), r.Method, dest.URL, r.Body)
 	if err != nil {
-		log.Fatalln(err)
+		handlingError(w, r, err, "error making origin request")
+		return
 	}
 
 	// Switch in the headers, but keep original Host
 	originReq.Header = r.Header.Clone()
-	originReq.Host = fqdn // Forward the host
+
+	if utils.Env_DevDisableHost {
+		originReq.Host = ""
+	} else {
+		originReq.Host = fqdn // Forward the host
+	}
 
 	// Additional headers
 	originReq.Header.Set("X-Url-Scheme", lo.Ternary(isTLS, "https", "http"))
-	originReq.Header.Set("X-Forwarded-Proto", r.Proto)
+	originReq.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
 	originReq.Header.Set("X-Forwarded-For", func(r *http.Request) string {
 		if existing := r.Header.Get("X-Forwarded-For"); existing != "" {
 			return existing + fmt.Sprintf(", %s", r.RemoteAddr)
@@ -139,13 +148,14 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	originRes, err := http.DefaultClient.Do(originReq)
 	if err != nil {
-		log.Fatalln(err)
+		handlingError(w, r, err, "error doing origin request")
+		return
 	}
 	defer originRes.Body.Close()
+	fmt.Println(r.Header.Get("Connection") == "Upgrade", originRes.StatusCode, originRes.StatusCode == http.StatusSwitchingProtocols)
 
 	if r.Header.Get("Connection") == "Upgrade" && originRes.StatusCode == http.StatusSwitchingProtocols {
 		// Websocket
-		fmt.Println("Handling a websocket connection", r.Header.Get("Connection"), r.Header.Get("Upgrade"))
 		handleUpgradeResponse(w, originReq, originRes)
 		return
 	}
@@ -169,7 +179,8 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 func handleUpgradeResponse(rw http.ResponseWriter, req *http.Request, res *http.Response) {
 	if req.Header.Get("Upgrade") != res.Header.Get("Upgrade") {
-		log.Fatalln("mismatched upgrade headers")
+		handlingError(rw, req, errors.New("mismatched upgrade headers"), "error checking upgrade headers")
+		return
 	}
 
 	backConn, ok := res.Body.(io.ReadWriteCloser)

@@ -123,7 +123,7 @@ func GetFQDNConfig(ctx context.Context, fqdn string) (*routing.Config, error) {
 				{
 					Destinations: []routing.Destination{
 						{
-							DEVTextResponse: true,
+							URL: "http://websockets.chilkat.io/wsChilkatEcho.ashx",
 						},
 					},
 				},
