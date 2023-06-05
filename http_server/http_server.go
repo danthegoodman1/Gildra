@@ -133,7 +133,8 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	if utils.Env_DevDisableHost {
 		originReq.Host = ""
 	} else {
-		originReq.Host = fqdn // Forward the host
+		// Forward the host
+		originReq.Host = fqdn
 	}
 
 	// Additional headers
