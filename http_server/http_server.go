@@ -8,6 +8,7 @@ import (
 	"github.com/danthegoodman1/Gildra/internal"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	"github.com/samber/lo"
 	"golang.org/x/net/context"
 	"golang.org/x/net/http2/h2c"
 	"golang.org/x/sync/errgroup"
@@ -46,6 +47,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	// Check for an ACME challenge
 	fqdn := r.Host
+	isTLS := r.TLS != nil
 	if strings.HasPrefix(r.URL.Path, ACMEPathPrefix) || strings.HasPrefix(r.URL.Path, ACMETestPathPrefix) {
 		logger.Debug().Msgf("got ACME HTTP challenge request for FQDN %s", fqdn)
 
@@ -121,10 +123,19 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Fatalln(err)
 	}
 
-	// TODO: add headers
 	// Switch in the headers, but keep original Host
 	originReq.Header = r.Header.Clone()
 	originReq.Host = fqdn // Forward the host
+
+	// Additional headers
+	originReq.Header.Set("X-Url-Scheme", lo.Ternary(isTLS, "https", "http"))
+	originReq.Header.Set("X-Forwarded-Proto", r.Proto)
+	originReq.Header.Set("X-Forwarded-For", func(r *http.Request) string {
+		if existing := r.Header.Get("X-Forwarded-For"); existing != "" {
+			return existing + fmt.Sprintf(", %s", r.RemoteAddr)
+		}
+		return r.RemoteAddr
+	}(r))
 
 	originRes, err := http.DefaultClient.Do(originReq)
 	if err != nil {

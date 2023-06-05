@@ -37,7 +37,7 @@ All connections will be terminated and forwarded to the origin as HTTP(S)/1.1
 ## Added Headers
 
 - `X-Fowarded-For` - will create or append to the header
-- `X-Forwarded-Proto` - the protocol in which the inbound connection was made to the Gildra node. Options `http/1.1`, `http/2`, `h2c`, `h3`
+- `X-Forwarded-Proto` - the protocol in which the inbound connection was made to the Gildra node. Options `HTTP/1.1`, `HTTP/2.0`, `h3`
 - `X-Url-Scheme` - the URL scheme of the request made to Gildra. Options `https`, `http`, `ws`, `wss`
 - `X-Replayed` - whether this request was replayed. Options `t`, `f`
 
