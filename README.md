@@ -10,7 +10,9 @@ Mutli-tenant TLS terminating proxy for L7 traffic. Supports unlimited domains an
   * [Metrics](#metrics)
   * [Design](#design)
     * [Fetching routing config and cert in separate operations](#fetching-routing-config-and-cert-in-separate-operations)
-  * [Why not support TCP (TLS) traffic?](#why-not-support-tcp-tls-traffic)
+  * [FAQs](#faqs)
+    * [Why not support TCP (TLS) traffic?](#why-not-support-tcp-tls-traffic)
+    * [Why support the HTTP-01 challenge?](#why-support-the-http-01-challenge)
 <!-- TOC -->
 
 Unlike other solutions, Gildra sits in your cloud. This means that requests aren't slowed down by being routed through another provider, and nobody sees your unencrypted traffic but you.
