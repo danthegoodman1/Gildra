@@ -4,6 +4,7 @@ Mutli-tenant TLS terminating proxy for L7 traffic. Supports unlimited domains an
 <!-- TOC -->
 * [Gildra](#gildra)
   * [Supported incoming protocols](#supported-incoming-protocols)
+  * [ACME HTTP-01 and ZeroSSL HTTP challenge support](#acme-http-01-and-zerossl-http-challenge-support)
   * [Environment Variables](#environment-variables)
   * [Added Headers](#added-headers)
   * [The `x-replay` header](#the-x-replay-header)
@@ -25,6 +26,12 @@ Unlike other solutions, Gildra sits in your cloud. This means that requests aren
 - H3 (TLS only)
 
 All connections will be terminated and forwarded to the origin as HTTP(S)/1.1
+
+## ACME HTTP-01 and ZeroSSL HTTP challenge support
+
+Gildra supports answering both the ACME HTTP-01 challenge, and the ZeroSSL custom HTTP challenge.
+
+The keys for each challenge token must be served by the Control Plane.
 
 ## Environment Variables
 
