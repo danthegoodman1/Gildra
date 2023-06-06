@@ -21,7 +21,8 @@ import (
 )
 
 var (
-	ErrDecoding = errors.New("error decoding")
+	ErrDecoding       = errors.New("error decoding")
+	ErrHighStatusCode = errors.New("high status code")
 
 	// Idempotency check
 	registeredHandlers = false
@@ -126,6 +127,10 @@ func getFQDNConfigFromCP(fqdn string) (*routing.Config, error) {
 		return nil, fmt.Errorf("error reading body: %w", err)
 	}
 
+	if res.StatusCode > 299 {
+		return nil, fmt.Errorf("high status code %d - %s: %w", res.StatusCode, string(resBytes), ErrHighStatusCode)
+	}
+
 	var resBody routing.Config
 	err = json.Unmarshal(resBytes, &resBody)
 	if err != nil {
@@ -151,6 +156,10 @@ func getFQDNCertFromCP(fqdn string) (*Cert, error) {
 	resBytes, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("error reading body: %w", err)
+	}
+
+	if res.StatusCode > 299 {
+		return nil, fmt.Errorf("high status code %d - %s: %w", res.StatusCode, string(resBytes), ErrHighStatusCode)
 	}
 
 	var resBody GetCertRes
@@ -248,6 +257,10 @@ func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
 	resBytes, err := io.ReadAll(res.Body)
 	if err != nil {
 		return "", fmt.Errorf("error reading body: %w", err)
+	}
+
+	if res.StatusCode > 299 {
+		return "", fmt.Errorf("high status code %d - %s: %w", res.StatusCode, string(resBytes), ErrHighStatusCode)
 	}
 
 	var resBody ChallengeTokenRes

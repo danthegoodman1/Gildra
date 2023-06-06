@@ -29,6 +29,8 @@ var (
 	logger     = gologger.NewLogger()
 	httpServer *http.Server
 	h3Server   *http3.Server
+
+	ErrInternalErrorFetchingTLS = errors.New("internal error fetching TLS")
 )
 
 const (
@@ -241,9 +243,13 @@ func StartServers() error {
 			fmt.Println("Getting cert for fqdn", fqdn)
 
 			// Load the certificate
-			cert, err := control_plane.GetFQDNCert(fqdn)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			cert, err := control_plane.GetFQDNCert(ctx, fqdn)
 			if err != nil {
-				return nil, err
+				logger.Error().Err(err).Msg("error in control_plane.GetFQDNCert")
+				// This error will get returned to the client
+				return nil, ErrInternalErrorFetchingTLS
 			}
 
 			return cert, nil
