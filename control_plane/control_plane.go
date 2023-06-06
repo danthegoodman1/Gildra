@@ -110,7 +110,7 @@ func RegisterCacheHandlers() {
 }
 
 func getFQDNConfigFromCP(fqdn string) (*routing.Config, error) {
-	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domain/%s/config", utils.Env_ControlPlaneAddr, fqdn), nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domains/%s/config", utils.Env_ControlPlaneAddr, fqdn), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating new request: %w", err)
 	}
@@ -141,7 +141,7 @@ func getFQDNConfigFromCP(fqdn string) (*routing.Config, error) {
 }
 
 func getFQDNCertFromCP(fqdn string) (*Cert, error) {
-	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domain/%s/cert", utils.Env_ControlPlaneAddr, fqdn), nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domains/%s/cert", utils.Env_ControlPlaneAddr, fqdn), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating new request: %w", err)
 	}
@@ -242,7 +242,7 @@ type ChallengeTokenRes struct {
 // to fulfil the HTTP ACME challenge.
 func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
 	log.Println("getting http challenge token")
-	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domain/%s/challenge/%s", utils.Env_ControlPlaneAddr, fqdn, idToken), nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domains/%s/challenge/%s", utils.Env_ControlPlaneAddr, fqdn, idToken), nil)
 	if err != nil {
 		return "", fmt.Errorf("error creating new request: %w", err)
 	}
