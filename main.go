@@ -32,6 +32,7 @@ func main() {
 	})
 	g.Go(func() error {
 		logger.Debug().Msg("starting groupcache")
+		control_plane.RegisterCacheHandlers()
 		return cache.CreateGroupCache()
 	})
 
@@ -39,8 +40,6 @@ func main() {
 	if err != nil {
 		logger.Error().Err(err).Msg("Error starting services")
 	}
-
-	control_plane.RegisterCacheHandlers()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

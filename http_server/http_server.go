@@ -141,12 +141,13 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	// Additional headers
 	originReq.Header.Set("X-Url-Scheme", lo.Ternary(isTLS, "https", "http"))
-	originReq.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
+	originReq.Header.Set("X-Forwarded-Proto", r.Proto)
 	originReq.Header.Set("X-Forwarded-For", func(r *http.Request) string {
+		incomingIP := strings.Split(r.RemoteAddr, ":")[0] // remove the port
 		if existing := r.Header.Get("X-Forwarded-For"); existing != "" {
-			return existing + fmt.Sprintf(", %s", r.RemoteAddr)
+			return existing + fmt.Sprintf(", %s", incomingIP)
 		}
-		return r.RemoteAddr
+		return incomingIP
 	}(r))
 
 	originRes, err := http.DefaultClient.Do(originReq)
@@ -164,18 +165,23 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Copy the headers
-	w.WriteHeader(originRes.StatusCode)
 	for key, vals := range originRes.Header {
 		for _, val := range vals {
 			w.Header().Add(key, val)
 		}
 	}
+	// Add h3 header
+	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
+	// Start the response
+	w.WriteHeader(originRes.StatusCode)
 
 	// Pump the body
 	_, err = io.Copy(w, originRes.Body)
 	if err != nil {
 		logger.Error().Err(err).Msg("error copying body from origin to client, this request is pretty broken at this point and the client will probably fail due to mismatched headers and body content")
 	}
+
+	fmt.Printf("%+v\n", w.Header())
 
 	return
 })
