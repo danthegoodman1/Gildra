@@ -114,6 +114,8 @@ func getFQDNConfigFromCP(fqdn string) (*routing.Config, error) {
 		return nil, fmt.Errorf("error creating new request: %w", err)
 	}
 
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", utils.Env_ControlPlaneAuthHeader))
+
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error doing request: %w", err)
@@ -138,6 +140,8 @@ func getFQDNCertFromCP(fqdn string) (*Cert, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating new request: %w", err)
 	}
+
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", utils.Env_ControlPlaneAuthHeader))
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -233,6 +237,8 @@ func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error creating new request: %w", err)
 	}
+
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", utils.Env_ControlPlaneAuthHeader))
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
