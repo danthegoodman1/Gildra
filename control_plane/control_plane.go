@@ -70,7 +70,7 @@ func RegisterCacheHandlers() {
 
 			internal.Metric_RoutingConfigCacheFill.Inc()
 
-			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(utils.Env_FQDNCacheSeconds)))
+			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(utils.Env_ConfigCacheSeconds)))
 		},
 	))
 
