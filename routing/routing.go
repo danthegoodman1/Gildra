@@ -28,7 +28,7 @@ type (
 	}
 	Destination struct {
 		// ONLY FOR DEV USE will respond with just some text, used for checking certs
-		DEVTextResponse bool
+		DEVTextResponse bool   `json:",omitempty"`
 		URL             string `json:",omitempty" validate:"require"`
 		// TODO
 		// NOT IMPLEMENTED taken as a part of a sum of weights for all destinations to determine where to send traffic. For example 2 destinations with weights of 1 and 4 will be 20% and 80% respectively. 2 destinations with weights 4 and 6 will be 40% and 60% respectively.
