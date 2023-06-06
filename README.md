@@ -94,3 +94,17 @@ It requires the least amount of involvement from end-users. They only have to ma
 With the DNS-01 challenge, they must delegate the ACME challenge to the hosting provider as a second DNS record. If they ever remove this record, then you are unable to manage certs for them. If they ever change the `A` or `CNAME` record it will be _very obvious very fast_ that they've broken something.
 
 You can still use Gildra with DNS-01 challenge certs though! For example if you wanted to support wildcard subdomains. However, Gildra won't handle the challenge for you.
+
+### What Certificate Authority (CA) should I use?
+
+You can check https://acmeclients.com/certificate-authorities/ for a great guide, but I would generally say start with Let's Encrypt.
+
+For example Vercel use Let's Encrypt. Cloudflare uses both Let's Encrypt and Google (among others, see: https://developers.cloudflare.com/ssl/edge-certificates/troubleshooting/caa-records/#what-caa-records-are-added-by-cloudflare)
+
+Options I'd consider:
+
+1. Let's Encrypt - high rate limits (can be raised), support non-profit
+2. Google Trust Services - great if you are on Google, can raise limits with more projects
+3. ZeroSSL - con is that things like curl won't accept these certificates, also their API is quite slow
+
+All of these offer free certificates when using ACME.
