@@ -2,12 +2,15 @@ package http_server
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/danthegoodman1/Gildra/control_plane"
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/internal"
+	"github.com/danthegoodman1/Gildra/utils"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	"github.com/samber/lo"
 	"golang.org/x/net/context"
 	"golang.org/x/net/http2/h2c"
 	"golang.org/x/sync/errgroup"
@@ -42,10 +45,12 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("Proto:", r.Proto)
 	fmt.Println("Headers:", r.Header)
+	fmt.Println("Host:", r.Host)
 
 	// Check for an ACME challenge
+	fqdn := r.Host
+	isTLS := r.TLS != nil
 	if strings.HasPrefix(r.URL.Path, ACMEPathPrefix) || strings.HasPrefix(r.URL.Path, ACMETestPathPrefix) {
-		fqdn := r.Header.Get("Host")
 		logger.Debug().Msgf("got ACME HTTP challenge request for FQDN %s", fqdn)
 
 		_, key := path.Split(r.URL.Path)
@@ -68,7 +73,6 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		internal.Metric_ACME_HTTP_Challenges.Inc()
 		return
 	} else if strings.HasPrefix(r.URL.Path, ZeroSSLPathPrefix) {
-		fqdn := r.Header.Get("Host")
 		logger.Debug().Msgf("got ZeroSSL HTTP challenge request for FQDN %s", fqdn)
 
 		_, key := path.Split(r.URL.Path)
@@ -92,39 +96,92 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Header.Get("Connection") == "Upgrade" {
-		fmt.Println("Handling a websocket connection", r.Header.Get("Connection"), r.Header.Get("Upgrade"))
-		//req, err := http.NewRequestWithContext(context.Background(), r.Method, "http://demo.piesocket.com/v3/channel_123?api_key=VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV&notify_self", r.Body)
-		req, err := http.NewRequestWithContext(context.Background(), r.Method, "http://websockets.chilkat.io/wsChilkatEcho.ashx", r.Body)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		// Fix the host header from the copy
-		ogHost := req.Header.Get("Host")
-		req.Header = r.Header
-		req.Header.Set("Host", ogHost)
+	// TODO: Make timeout customizable
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
+	defer cancel()
 
-		res, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Fatalln(err)
-		}
+	config, err := control_plane.GetFQDNConfig(ctx, fqdn)
+	if err != nil {
+		handlingError(w, r, err, "error in control_plane.GetFQDNConfig")
+		return
+	}
 
-		if res.StatusCode == http.StatusSwitchingProtocols {
-			fmt.Println("Switching protocols response")
-			handleUpgradeResponse(w, req, res)
-			return
+	dest, err := config.MatchDestination(r)
+	if err != nil {
+		handlingError(w, r, err, "error in config.MatchDestination")
+		return
+	}
+
+	if dest.DEVTextResponse {
+		logger.Debug().Msg("dev response, writing text")
+		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprintf(w, "DEV response\n\tproto: %s\n", r.Proto)
+		return
+	}
+
+	// Proxy the request
+	originReq, err := http.NewRequestWithContext(context.Background(), r.Method, dest.URL, r.Body)
+	if err != nil {
+		handlingError(w, r, err, "error making origin request")
+		return
+	}
+
+	// Switch in the headers, but keep original Host
+	originReq.Header = r.Header.Clone()
+
+	if utils.Env_DevDisableHost {
+		originReq.Host = ""
+	} else {
+		// Forward the host
+		originReq.Host = fqdn
+	}
+
+	// Additional headers
+	originReq.Header.Set("X-Url-Scheme", lo.Ternary(isTLS, "https", "http"))
+	originReq.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
+	originReq.Header.Set("X-Forwarded-For", func(r *http.Request) string {
+		if existing := r.Header.Get("X-Forwarded-For"); existing != "" {
+			return existing + fmt.Sprintf(", %s", r.RemoteAddr)
+		}
+		return r.RemoteAddr
+	}(r))
+
+	originRes, err := http.DefaultClient.Do(originReq)
+	if err != nil {
+		handlingError(w, r, err, "error doing origin request")
+		return
+	}
+	defer originRes.Body.Close()
+	fmt.Println(r.Header.Get("Connection") == "Upgrade", originRes.StatusCode, originRes.StatusCode == http.StatusSwitchingProtocols)
+
+	if r.Header.Get("Connection") == "Upgrade" && originRes.StatusCode == http.StatusSwitchingProtocols {
+		// Websocket
+		handleUpgradeResponse(w, originReq, originRes)
+		return
+	}
+
+	// Copy the headers
+	w.WriteHeader(originRes.StatusCode)
+	for key, vals := range originRes.Header {
+		for _, val := range vals {
+			w.Header().Add(key, val)
 		}
 	}
 
-	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
-	w.WriteHeader(http.StatusCreated)
-	fmt.Fprintf(w, "Hello world, proto: %s\n", r.Proto)
+	// Pump the body
+	_, err = io.Copy(w, originRes.Body)
+	if err != nil {
+		logger.Error().Err(err).Msg("error copying body from origin to client, this request is pretty broken at this point and the client will probably fail due to mismatched headers and body content")
+	}
+
 	return
 })
 
 func handleUpgradeResponse(rw http.ResponseWriter, req *http.Request, res *http.Response) {
 	if req.Header.Get("Upgrade") != res.Header.Get("Upgrade") {
-		log.Fatalln("mismatched upgrade headers")
+		handlingError(rw, req, errors.New("mismatched upgrade headers"), "error checking upgrade headers")
+		return
 	}
 
 	backConn, ok := res.Body.(io.ReadWriteCloser)
@@ -241,4 +298,14 @@ func Shutdown(ctx context.Context) error {
 		return h3Server.CloseGracefully(delta)
 	})
 	return g.Wait()
+}
+
+// handles writing the error, should always return after calling this
+func handlingError(w http.ResponseWriter, r *http.Request, e error, msg string) {
+	logger.Error().Err(e).Msg(msg)
+	w.WriteHeader(http.StatusInternalServerError)
+	_, err := fmt.Fprint(w, "internal error")
+	if err != nil {
+		logger.Error().Err(err).Msg("error writing internal error to HTTP request")
+	}
 }

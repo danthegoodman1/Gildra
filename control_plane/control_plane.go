@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/internal"
+	"github.com/danthegoodman1/Gildra/routing"
 	"github.com/danthegoodman1/Gildra/utils"
 	"github.com/go-redis/redis/v8"
 	"github.com/mailgun/groupcache/v2"
@@ -40,9 +41,6 @@ var (
 )
 
 type (
-	FQDNConfig struct {
-		Cert Cert
-	}
 	Cert struct {
 		CertPEM string
 		KeyPEM  string
@@ -56,7 +54,7 @@ func RegisterCacheHandlers() {
 		return
 	}
 
-	FQDNGroupCache = groupcache.NewGroup("fqdn_config", Env_FQDNCacheMB, groupcache.GetterFunc(
+	FQDNGroupCache = groupcache.NewGroup("fqdn_config", utils.Env_FQDNCacheMB, groupcache.GetterFunc(
 		func(ctx context.Context, fqdn string, dest groupcache.Sink) error {
 
 			fqdnConf, err := getFQDNConfigFromCP(fqdn)
@@ -72,11 +70,11 @@ func RegisterCacheHandlers() {
 
 			internal.Metric_RoutingConfigCacheFill.Inc()
 
-			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(Env_FQDNCacheSeconds)))
+			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(utils.Env_ConfigCacheSeconds)))
 		},
 	))
 
-	CertGroupCache = groupcache.NewGroup("certs", Env_CertCacheMB, groupcache.GetterFunc(
+	CertGroupCache = groupcache.NewGroup("certs", utils.Env_CertCacheMB, groupcache.GetterFunc(
 		func(ctx context.Context, fqdn string, dest groupcache.Sink) error {
 			certResp, err := getFQDNCertFromCP(fqdn)
 			if err != nil {
@@ -104,45 +102,39 @@ func RegisterCacheHandlers() {
 
 			internal.Metric_CertCacheFill.Inc()
 
-			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(Env_CertCacheSeconds)))
+			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(utils.Env_CertCacheSeconds)))
 		},
 	))
 	registeredHandlers = true
 }
 
-func getFQDNConfigFromCP(fqdn string) (*FQDNConfig, error) {
-	return nil, nil
+func getFQDNConfigFromCP(fqdn string) (*routing.Config, error) {
+	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domain/%s/config", utils.Env_ControlPlaneAddr, fqdn), nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new request: %w", err)
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error doing request: %w", err)
+	}
+	defer res.Body.Close()
+	resBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading body: %w", err)
+	}
+
+	var resBody routing.Config
+	err = json.Unmarshal(resBytes, &resBody)
+	if err != nil {
+		return nil, fmt.Errorf("error in Unmarshal: %w", err)
+	}
+
+	return &resBody, nil
 }
 
 func getFQDNCertFromCP(fqdn string) (*Cert, error) {
-	return nil, nil
-}
-
-func GetFQDNConfig(ctx context.Context, fqdn string) (*FQDNConfig, error) {
-	var b []byte
-	err := FQDNGroupCache.Get(ctx, fqdn, groupcache.AllocatingByteSliceSink(&b))
-	if err != nil {
-		return nil, fmt.Errorf("error getting from groupcache: %w", err)
-	}
-
-	var config FQDNConfig
-	err = json.Unmarshal(b, &config)
-	if err != nil {
-		return nil, fmt.Errorf("error in json.Unmarshal: %w", err)
-	}
-
-	internal.Metric_RoutingConfigLookups.Inc()
-	return &config, nil
-}
-
-type GetCertRes struct {
-	Cert       string
-	PrivateKey string
-}
-
-func GetFQDNCert(fqdn string) (*tls.Certificate, error) {
-	log.Println("getting cert for fqdn", fqdn)
-	req, err := http.NewRequestWithContext(context.Background(), "GET", utils.Env_ControlPlaneAddr+"/cert?domain="+fqdn, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domain/%s/cert", utils.Env_ControlPlaneAddr, fqdn), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating new request: %w", err)
 	}
@@ -163,17 +155,50 @@ func GetFQDNCert(fqdn string) (*tls.Certificate, error) {
 		return nil, fmt.Errorf("error in Unmarshal: %w", err)
 	}
 
-	config := FQDNConfig{Cert: Cert{
+	c := Cert{
 		CertPEM: resBody.Cert,
-		KeyPEM:  resBody.PrivateKey,
-	}}
-
-	internal.Metric_CertLookups.Inc()
-
-	return config.GetCert()
+		KeyPEM:  resBody.Key,
+	}
+	return &c, nil
 }
 
-func GetFQDNCertForReal(ctx context.Context, fqdn string) (*tls.Certificate, error) {
+func GetFQDNConfig(ctx context.Context, fqdn string) (*routing.Config, error) {
+	return &routing.Config{Rules: []routing.Rule{
+		{
+			Matches: []routing.Match{
+				{
+					Destinations: []routing.Destination{
+						{
+							URL: "http://websockets.chilkat.io/wsChilkatEcho.ashx",
+						},
+					},
+				},
+			},
+		},
+	}}, nil
+
+	var b []byte
+	err := FQDNGroupCache.Get(ctx, fqdn, groupcache.AllocatingByteSliceSink(&b))
+	if err != nil {
+		return nil, fmt.Errorf("error getting from groupcache: %w", err)
+	}
+
+	var config routing.Config
+	err = json.Unmarshal(b, &config)
+	if err != nil {
+		return nil, fmt.Errorf("error in json.Unmarshal: %w", err)
+	}
+
+	internal.Metric_RoutingConfigLookups.Inc()
+	return &config, nil
+}
+
+type GetCertRes struct {
+	Cert string
+	Key  string
+}
+
+func GetFQDNCert(ctx context.Context, fqdn string) (*tls.Certificate, error) {
 	log.Println("getting cert for fqdn", fqdn)
 	var b []byte
 	err := CertGroupCache.Get(ctx, fqdn, groupcache.AllocatingByteSliceSink(&b))
@@ -196,11 +221,15 @@ func GetFQDNCertForReal(ctx context.Context, fqdn string) (*tls.Certificate, err
 	return c, nil
 }
 
+type ChallengeTokenRes struct {
+	Key string
+}
+
 // GetHTTPChallengeToken fetches the HTTP challenge token from the control plane
 // to fulfil the HTTP ACME challenge.
 func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
 	log.Println("getting http challenge token")
-	req, err := http.NewRequestWithContext(context.Background(), "GET", utils.Env_ControlPlaneAddr+"/cert/token?token="+idToken, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/domain/%s/challenge/%s", utils.Env_ControlPlaneAddr, fqdn, idToken), nil)
 	if err != nil {
 		return "", fmt.Errorf("error creating new request: %w", err)
 	}
@@ -215,33 +244,13 @@ func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
 		return "", fmt.Errorf("error reading body: %w", err)
 	}
 
-	return string(resBytes), nil
-}
-
-func (c *FQDNConfig) GetCert() (*tls.Certificate, error) {
-	certDERBlock, _ := pem.Decode([]byte(c.Cert.CertPEM))
-	if certDERBlock == nil {
-		return nil, fmt.Errorf("error decoding CertPEM: %w", ErrDecoding)
-	}
-	cert, err := x509.ParseCertificate(certDERBlock.Bytes)
+	var resBody ChallengeTokenRes
+	err = json.Unmarshal(resBytes, &resBody)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing decoded cert block: %w", err)
+		return "", fmt.Errorf("error in Unmarshal: %w", err)
 	}
 
-	keyDERBlock, _ := pem.Decode([]byte(c.Cert.KeyPEM))
-	if keyDERBlock == nil {
-		return nil, fmt.Errorf("error decoding KeyPEM: %w", ErrDecoding)
-	}
-	key, err := x509.ParsePKCS1PrivateKey(keyDERBlock.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing decoded key block: %w", err)
-	}
-
-	certificate := tls.Certificate{
-		Certificate: [][]byte{cert.Raw},
-		PrivateKey:  key,
-	}
-	return &certificate, nil
+	return resBody.Key, nil
 }
 
 func (c *Cert) GetCert() (*tls.Certificate, error) {

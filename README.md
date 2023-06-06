@@ -10,7 +10,9 @@ Mutli-tenant TLS terminating proxy for L7 traffic. Supports unlimited domains an
   * [Metrics](#metrics)
   * [Design](#design)
     * [Fetching routing config and cert in separate operations](#fetching-routing-config-and-cert-in-separate-operations)
-  * [Why not support TCP (TLS) traffic?](#why-not-support-tcp-tls-traffic)
+  * [FAQs](#faqs)
+    * [Why not support TCP (TLS) traffic?](#why-not-support-tcp-tls-traffic)
+    * [Why support the HTTP-01 challenge?](#why-support-the-http-01-challenge)
 <!-- TOC -->
 
 Unlike other solutions, Gildra sits in your cloud. This means that requests aren't slowed down by being routed through another provider, and nobody sees your unencrypted traffic but you.
@@ -37,7 +39,7 @@ All connections will be terminated and forwarded to the origin as HTTP(S)/1.1
 ## Added Headers
 
 - `X-Fowarded-For` - will create or append to the header
-- `X-Forwarded-Proto` - the protocol in which the inbound connection was made to the Gildra node. Options `http/1.1`, `http/2`, `h2c`, `h3`
+- `X-Forwarded-Proto` - the protocol in which the inbound connection was made to the Gildra node. Options `HTTP/1.1`, `HTTP/2.0`, `h3`
 - `X-Url-Scheme` - the URL scheme of the request made to Gildra. Options `https`, `http`, `ws`, `wss`
 - `X-Replayed` - whether this request was replayed. Options `t`, `f`
 
@@ -73,6 +75,8 @@ As a result, after we load the cert into the request handler and go to look up t
 ### Why not support TCP (TLS) traffic?
 
 While this wouldn't be too difficult to add, it does require a decent change in request handling architecture and configurability. Additionally, most services that use TCP directly such as databases prefer to be the managers of certificates and encrypted traffic (just see the warnings that happen when you run them without!), and are not multi-tenant in the same way a web service might be.
+
+We also wanted the ability to support L7 configuration options like headers, routing, and more.
 
 TL;DR we wanted to start simple, and hit the majority of uses cases.
 
