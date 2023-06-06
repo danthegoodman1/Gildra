@@ -13,4 +13,9 @@ var (
 
 	// Disables setting the host header so the HTTP client sets it automatically, so forwarding localhost works with clients
 	Env_DevDisableHost = os.Getenv("DEV_DISABLE_HOST") == "1"
+
+	Env_FQDNCacheMB      = MustEnvOrDefaultInt64("FQDN_CACHE_MB", 10_000_000)
+	Env_CertCacheMB      = MustEnvOrDefaultInt64("CERT_CACHE_MB", 10_000_000)
+	Env_FQDNCacheSeconds = MustEnvOrDefaultInt64("FQDN_CACHE_SECONDS", 10)
+	Env_CertCacheSeconds = MustEnvOrDefaultInt64("CERT_CACHE_SECONDS", 300)
 )

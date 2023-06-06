@@ -54,7 +54,7 @@ func RegisterCacheHandlers() {
 		return
 	}
 
-	FQDNGroupCache = groupcache.NewGroup("fqdn_config", Env_FQDNCacheMB, groupcache.GetterFunc(
+	FQDNGroupCache = groupcache.NewGroup("fqdn_config", utils.Env_FQDNCacheMB, groupcache.GetterFunc(
 		func(ctx context.Context, fqdn string, dest groupcache.Sink) error {
 
 			fqdnConf, err := getFQDNConfigFromCP(fqdn)
@@ -70,11 +70,11 @@ func RegisterCacheHandlers() {
 
 			internal.Metric_RoutingConfigCacheFill.Inc()
 
-			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(Env_FQDNCacheSeconds)))
+			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(utils.Env_FQDNCacheSeconds)))
 		},
 	))
 
-	CertGroupCache = groupcache.NewGroup("certs", Env_CertCacheMB, groupcache.GetterFunc(
+	CertGroupCache = groupcache.NewGroup("certs", utils.Env_CertCacheMB, groupcache.GetterFunc(
 		func(ctx context.Context, fqdn string, dest groupcache.Sink) error {
 			certResp, err := getFQDNCertFromCP(fqdn)
 			if err != nil {
@@ -102,7 +102,7 @@ func RegisterCacheHandlers() {
 
 			internal.Metric_CertCacheFill.Inc()
 
-			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(Env_CertCacheSeconds)))
+			return dest.SetBytes(jsonBytes, time.Now().Add(time.Second*time.Duration(utils.Env_CertCacheSeconds)))
 		},
 	))
 	registeredHandlers = true
