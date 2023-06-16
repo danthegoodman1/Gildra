@@ -99,7 +99,7 @@ You can still use Gildra with DNS-01 challenge certs though! For example if you 
 
 You can check https://acmeclients.com/certificate-authorities/ for a great guide, but I would generally say start with Let's Encrypt.
 
-For example Vercel use Let's Encrypt. Cloudflare uses both Let's Encrypt and Google (among others, see: https://developers.cloudflare.com/ssl/edge-certificates/troubleshooting/caa-records/#what-caa-records-are-added-by-cloudflare)
+For example Vercel uses Let's Encrypt. Cloudflare uses both Let's Encrypt and Google (among others, see: https://developers.cloudflare.com/ssl/edge-certificates/troubleshooting/caa-records/#what-caa-records-are-added-by-cloudflare)
 
 Options I'd consider:
 
