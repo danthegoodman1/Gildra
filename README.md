@@ -66,10 +66,11 @@ The metrics server is run by default in port `8091`. This can be changed with th
 
 ### Fetching routing config and cert in separate operations
 
-This was decided for 2 major reasons:
+This was decided for a few reasons:
 
-1. Routing configs should probably have a much lower cache than certs
-2. Fetching cert and routing config at the same time would guarantee that we use at least two TCP packets in the response, where a routing config can often fit into just one.
+1. Routing configs should probably have a far lower cache than certs
+2. Fetching cert and routing config at the same time would guarantee that we use at least two TCP packets in the response, where a routing config can often fit into just one
+3. They should be stored separately in the control plane, so it doesn't make sense if we need to do 2 lookups every time we want to refresh the routing config cache
 
 This is where the `CONCURRENT_FETCH_ROUTING_CONFIG` setting comes in. Because certs are cached more aggressively, and you always need to have both the cert and routing config to answer a request, when we are filling the cert cache we asynchronously fill the routing config cache in the background.
 

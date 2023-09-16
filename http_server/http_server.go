@@ -244,7 +244,6 @@ func StartServers() error {
 		GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
 			// You can use info.ServerName to determine which certificate to load
 			fqdn := info.ServerName
-			// TODO: Look up cert from control plane
 			logger.Debug().Msgf("fetching cert for fqdn %s", fqdn)
 			fmt.Println("Getting cert for fqdn", fqdn)
 
