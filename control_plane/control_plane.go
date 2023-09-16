@@ -83,7 +83,7 @@ func InitCache(ctx context.Context) {
 				return fmt.Errorf("error in GetFQDNConfig: %w", err)
 			}
 
-			if utils.Env_FetchCertConcurrently {
+			if utils.Env_FetchConfigConcurrently {
 				go func(ctx context.Context, fqdn string) {
 					// async fill the cache for the routing config in the background
 					err := FQDNGroupCache.Get(ctx, fqdn, nil)
