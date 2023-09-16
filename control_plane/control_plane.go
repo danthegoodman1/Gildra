@@ -40,9 +40,8 @@ type (
 
 // InitCache must only be called after groupcache is registered
 func InitCache(ctx context.Context) {
-	logger.Debug().Msg("initializing cache")
-
 	logger := zerolog.Ctx(ctx)
+	logger.Debug().Msg("initializing cache")
 	pool := groupcache.NewHTTPPoolOpts(utils.CacheSelfAddr, &groupcache.HTTPPoolOptions{})
 
 	// Add more peers to the cluster You MUST Ensure our instance is included in this list else
@@ -50,14 +49,15 @@ func InitCache(ctx context.Context) {
 	// be able to determine if our instance owns the key.
 	pool.Set(utils.CachePeers...)
 
+	listenAddr := strings.Split(utils.CacheSelfAddr, "://")[1]
 	poolServer = &http.Server{
-		Addr:    strings.Split(utils.CacheSelfAddr, "://")[1],
+		Addr:    listenAddr,
 		Handler: pool,
 	}
 
 	// Start an HTTP server to listen for peer requests from the groupcache
 	go func() {
-		logger.Debug().Msg("cache pool server listening...")
+		logger.Debug().Msgf("cache pool server listening on %s", listenAddr)
 		if err := poolServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error().Err(err).Msg("error on pool server listen")
 		}
