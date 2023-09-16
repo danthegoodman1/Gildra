@@ -49,7 +49,7 @@ func InitCache(ctx context.Context) {
 	// be able to determine if our instance owns the key.
 	pool.Set(utils.CachePeers...)
 
-	listenAddr := strings.Split(utils.CacheSelfAddr, "://")[1]
+	listenAddr := ":" + strings.Split(utils.CacheSelfAddr, ":")[2]
 	poolServer = &http.Server{
 		Addr:    listenAddr,
 		Handler: pool,
@@ -57,7 +57,7 @@ func InitCache(ctx context.Context) {
 
 	// Start an HTTP server to listen for peer requests from the groupcache
 	go func() {
-		logger.Debug().Msgf("cache pool server listening on %s", listenAddr)
+		logger.Debug().Msgf("cache pool server listening on %s (HTTP)", listenAddr)
 		if err := poolServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error().Err(err).Msg("error on pool server listen")
 		}
