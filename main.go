@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"github.com/danthegoodman1/Gildra/cache"
 	"github.com/danthegoodman1/Gildra/control_plane"
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/http_server"
@@ -20,6 +19,7 @@ var (
 )
 
 func main() {
+	mainCtx := context.Background()
 	logger.Info().Msg("starting Gildra")
 	g := errgroup.Group{}
 	g.Go(func() error {
@@ -30,11 +30,13 @@ func main() {
 		logger.Debug().Msg("starting internal server")
 		return internal.StartServer()
 	})
-	g.Go(func() error {
-		logger.Debug().Msg("starting groupcache")
-		control_plane.RegisterCacheHandlers()
-		return cache.CreateGroupCache()
-	})
+	if utils.CacheEnabled {
+		g.Go(func() error {
+			logger.Debug().Msg("starting groupcache")
+			control_plane.InitCache(mainCtx)
+			return nil
+		})
+	}
 
 	err := g.Wait()
 	if err != nil {
@@ -53,7 +55,7 @@ func main() {
 		logger.Info().Msgf("slept for %ds, exiting", utils.Env_SleepSeconds)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(utils.Env_SleepSeconds))
+	ctx, cancel := context.WithTimeout(mainCtx, time.Second*time.Duration(utils.Env_SleepSeconds))
 	defer cancel()
 
 	g = errgroup.Group{}
@@ -63,9 +65,11 @@ func main() {
 	g.Go(func() error {
 		return internal.Shutdown(ctx)
 	})
-	g.Go(func() error {
-		return cache.Shutdown(ctx)
-	})
+	if utils.CacheEnabled {
+		g.Go(func() error {
+			return control_plane.StopCache(ctx)
+		})
+	}
 
 	if err := g.Wait(); err != nil {
 		logger.Error().Err(err).Msg("error shutting down servers")
