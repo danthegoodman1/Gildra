@@ -217,7 +217,7 @@ func getCert(c echo.Context) error {
 func getConfig(c echo.Context) error {
 	domain := c.Param("domain")
 
-	routingBytes, err := os.ReadFile(fmt.Sprintf("%s.json", domain))
+	routingBytes, err := os.ReadFile(fmt.Sprintf("cpfiles/%s.json", domain))
 	if os.IsNotExist(err) {
 		return c.String(http.StatusNotFound, "routing config does not exist for "+domain)
 	}
