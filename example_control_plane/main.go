@@ -31,6 +31,7 @@ func main() {
 	server := echo.New()
 	server.HideBanner = true
 	server.HidePort = true
+	server.HTTPErrorHandler = customHTTPErrorHandler
 	log.Println("starting example control plane on :8080")
 
 	server.GET("/echo", echoHandler)
@@ -50,6 +51,12 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
 	log.Println("stopping example control plane")
+}
+
+func customHTTPErrorHandler(err error, c echo.Context) {
+	if err := c.String(http.StatusInternalServerError, err.Error()); err != nil {
+		c.Logger().Error(err)
+	}
 }
 
 // echoHandler echos back HTTP info of the incoming request
