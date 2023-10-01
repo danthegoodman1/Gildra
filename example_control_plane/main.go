@@ -135,6 +135,7 @@ func createCert(c echo.Context) error {
 
 	// Store the token for a key (we aren't bothering to match URL)
 	httpChallenges.Store(challenge.Token, challenge.Key)
+	log.Printf("Stored token %s key %s", challenge.Token, challenge.Key)
 
 	chal, err := acme_http.NotifyChallenge(ctx, caDir, acctKid, pk, *challenge)
 	if err != nil {
