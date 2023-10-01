@@ -25,7 +25,7 @@ var (
 
 func main() {
 	if CAEmail == "" {
-		log.Fatal("Need to set the EMAIL env var!")
+		log.Fatal("Need to set the CA_EMAIL env var!")
 	}
 
 	server := echo.New()

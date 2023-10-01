@@ -13,3 +13,5 @@ services:
     build: ./example_control_plane
     ports:
       - 8080:8080
+    environment:
+      - CA_EMAIL=youremailhere@gmail.com
