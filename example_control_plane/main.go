@@ -165,20 +165,21 @@ func createCert(c echo.Context) error {
 		return fmt.Errorf("error in GetCert: %w", err)
 	}
 
-	log.Printf("Got cert: %+v\n", resource)
+	// log.Printf("Got cert: %+v\n", resource)
+	log.Println("Got cert!")
 
 	// Store cert on disk
-	err = os.WriteFile(fmt.Sprintf("%s.issuer", domain), resource.IssuerCertificate, 0666)
+	err = os.WriteFile(fmt.Sprintf("cpfiles/%s.issuer", domain), resource.IssuerCertificate, 0666)
 	if err != nil {
 		log.Fatalf("error writing issuer to disk: %s", err)
 	}
 
-	err = os.WriteFile(fmt.Sprintf("%s.key", domain), resource.PrivateKey, 0666)
+	err = os.WriteFile(fmt.Sprintf("cpfiles/%s.key", domain), resource.PrivateKey, 0666)
 	if err != nil {
 		log.Fatalf("error writing key to disk: %s", err)
 	}
 
-	err = os.WriteFile(fmt.Sprintf("%s.cert", domain), resource.Certificate, 0666)
+	err = os.WriteFile(fmt.Sprintf("cpfiles/%s.cert", domain), resource.Certificate, 0666)
 	if err != nil {
 		log.Fatalf("error writing cert to disk: %s", err)
 	}
@@ -188,7 +189,7 @@ func createCert(c echo.Context) error {
 
 func getCert(c echo.Context) error {
 	domain := c.Param("domain")
-	keyBytes, err := os.ReadFile(fmt.Sprintf("%s.key", domain))
+	keyBytes, err := os.ReadFile(fmt.Sprintf("cpfiles/%s.key", domain))
 	if os.IsNotExist(err) {
 		return c.String(http.StatusNotFound, "tls key does not exist for "+domain)
 	}
@@ -196,7 +197,7 @@ func getCert(c echo.Context) error {
 		return fmt.Errorf("error in os.Readfile for key: %w", err)
 	}
 
-	certBytes, err := os.ReadFile(fmt.Sprintf("%s.cert", domain))
+	certBytes, err := os.ReadFile(fmt.Sprintf("cpfiles/%s.cert", domain))
 	if os.IsNotExist(err) {
 		return c.String(http.StatusNotFound, "tls cert does not exist for "+domain)
 	}
