@@ -1,0 +1,8 @@
+### Echo request through control plane
+GET http://165.227.111.111:8080/echo
+
+### Create cert
+POST http://165.227.111.111:8080/create_cert?domain=gildra.com
+
+### Echo request through Gildra
+GET https://gildra.com/echo?hey=ho

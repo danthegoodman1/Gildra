@@ -1,0 +1,15 @@
+{
+  "Rules": [
+    {
+      "Matches": [
+        {
+          "Destinations": [
+            {
+              "URL": "http://control-plane:8080"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

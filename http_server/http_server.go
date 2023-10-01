@@ -56,52 +56,52 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, ACMEPathPrefix) || strings.HasPrefix(r.URL.Path, ACMETestPathPrefix) {
 		logger.Debug().Msgf("got ACME HTTP challenge request for FQDN %s", fqdn)
 
-		_, key := path.Split(r.URL.Path)
-		fmt.Println("Got challenge for fqdn", fqdn, "key", key)
-		token, err := control_plane.GetHTTPChallengeToken(fqdn, key)
+		_, token := path.Split(r.URL.Path)
+		fmt.Println("Got challenge for fqdn", fqdn, "token", token)
+		key, err := control_plane.GetHTTPChallengeKey(fqdn, token)
 		if err != nil {
 			logger.Error().Err(err).Msgf("error in GetHTTPChallengeToken for FQDN %s", fqdn)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		fmt.Println("Got token", token)
+		fmt.Println("Got key", key)
 		w.WriteHeader(http.StatusOK)
-		_, err = w.Write([]byte(token))
+		_, err = w.Write([]byte(key))
 		if err != nil {
 			logger.Error().Err(err).Msg("error in writing bytes to response for HTTP ACME challenge")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		fmt.Println("wrote response", token)
+		fmt.Println("wrote response", key)
 		internal.Metric_ACME_HTTP_Challenges.Inc()
 		return
 	} else if strings.HasPrefix(r.URL.Path, ZeroSSLPathPrefix) {
 		logger.Debug().Msgf("got ZeroSSL HTTP challenge request for FQDN %s", fqdn)
 
-		_, key := path.Split(r.URL.Path)
-		fmt.Println("Got challenge for fqdn", fqdn, "key", key)
-		token, err := control_plane.GetHTTPChallengeToken(fqdn, key)
+		_, token := path.Split(r.URL.Path)
+		fmt.Println("Got challenge for fqdn", fqdn, "token", token)
+		key, err := control_plane.GetHTTPChallengeKey(fqdn, token)
 		if err != nil {
 			logger.Error().Err(err).Msgf("error in GetHTTPChallengeToken for FQDN %s", fqdn)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		fmt.Println("Got token", token)
+		fmt.Println("Got key", key)
 		w.WriteHeader(http.StatusOK)
-		_, err = w.Write([]byte(token))
+		_, err = w.Write([]byte(key))
 		if err != nil {
 			logger.Error().Err(err).Msg("error in writing bytes to response for HTTP ZeroSSL challenge")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		fmt.Println("wrote response", token)
+		fmt.Println("wrote response", key)
 		internal.Metric_ZEROSSL_HTTP_Challenges.Inc()
 		return
 	}
 
 	if utils.Dev_TextResponse {
 		logger.Debug().Msg("dev response, writing text")
-		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
+		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400")
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, "DEV response\n\tproto: %s\n", r.Proto)
 		return
@@ -125,14 +125,18 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	if dest.DEVTextResponse {
 		logger.Debug().Msg("dev response, writing text")
-		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
+		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400")
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, "DEV response\n\tproto: %s\n", r.Proto)
 		return
 	}
 
+	// Replace up through the domain name with destination
+	path := r.URL.String()
+	finalURL := dest.URL + path
+
 	// Proxy the request
-	originReq, err := http.NewRequestWithContext(context.Background(), r.Method, dest.URL, r.Body)
+	originReq, err := http.NewRequestWithContext(context.Background(), r.Method, finalURL, r.Body)
 	if err != nil {
 		handlingError(w, r, err, "error making origin request")
 		return
@@ -180,7 +184,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Add h3 header
-	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
+	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400")
 	// Start the response
 	w.WriteHeader(originRes.StatusCode)
 

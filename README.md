@@ -46,7 +46,7 @@ The keys for each challenge token must be served by the Control Plane.
 ## Added Headers
 
 - `X-Fowarded-For` - will create or append to the header
-- `X-Forwarded-Proto` - the protocol in which the inbound connection was made to the Gildra node. Options `HTTP/1.1`, `HTTP/2.0`, `h3`
+- `X-Forwarded-Proto` - the protocol in which the inbound connection was made to the Gildra node. Options `HTTP/1.1`, `HTTP/2.0`, `HTTP/3.0`
 - `X-Url-Scheme` - the URL scheme of the request made to Gildra. Options `https`, `http`, `ws`, `wss`
 - `X-Replayed` - whether this request was replayed. Options `t`, `f`
 

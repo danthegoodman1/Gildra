@@ -1,0 +1,21 @@
+version: "3"
+services:
+  gildra:
+    build: .
+    ports:
+      - 80:80
+      - 443:443/tcp
+      - 443:443/udp
+      - 8042:8042
+    environment:
+      - PRETTY=1
+      - DEBUG=1
+      - CP_ADDR=http://control-plane:8080
+  control-plane:
+    build: ./example_control_plane
+    ports:
+      - 8080:8080
+    environment:
+      - CA_EMAIL=youremailhere@gmail.com
+    volumes:
+      - ./cpfiles:/app/cpfiles

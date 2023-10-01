@@ -220,9 +220,9 @@ type ChallengeTokenRes struct {
 	Key string
 }
 
-// GetHTTPChallengeToken fetches the HTTP challenge token from the control plane
+// GetHTTPChallengeKey fetches the HTTP challenge token from the control plane
 // to fulfil the HTTP ACME challenge.
-func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
+func GetHTTPChallengeKey(fqdn, idToken string) (string, error) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, fmt.Sprintf("%s/domains/%s/challenge/%s", utils.Env_ControlPlaneAddr, fqdn, idToken), nil)
 	if err != nil {
 		return "", fmt.Errorf("error creating new request: %w", err)
