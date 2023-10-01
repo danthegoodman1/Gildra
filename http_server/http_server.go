@@ -133,6 +133,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	// Replace up through the domain name with destination
 	u := r.URL.String()
+	fmt.Println("incoming url", u)
 	endOfDomain := strings.Index(u, fqdn) + len(fqdn)
 	finalURL := dest.URL + u[endOfDomain:]
 
