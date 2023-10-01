@@ -9,7 +9,7 @@ services:
     environment:
       - PRETTY=1
       - DEBUG=1
-      - CP_ADDR=http://control-plane
+      - CP_ADDR=http://control-plane:8080
   control-plane:
     build: ./example_control_plane
     ports:
