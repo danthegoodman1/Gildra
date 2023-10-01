@@ -17,6 +17,10 @@ import (
 
 var (
 	httpChallenges = syncx.NewMap[string, string]()
+
+	// "https://acme-staging-v02.api.letsencrypt.org/directory"
+	CADirURL = os.Getenv("CA_DIR")
+	CAEmail  = os.Getenv("EMAIL")
 )
 
 func main() {
@@ -72,12 +76,12 @@ func createCert(c echo.Context) error {
 	domain := c.QueryParam("domain")
 	ctx := c.Request().Context()
 
-	caDir, err := acme_http.GetCADir(ctx, "https://acme-staging-v02.api.letsencrypt.org/directory")
+	caDir, err := acme_http.GetCADir(ctx, CADirURL)
 	if err != nil {
 		return fmt.Errorf("error in GetCADir: %w", err)
 	}
 
-	acctKid, pk, err := acme_http.CreateAccount(ctx, os.Getenv("EMAIL"), caDir, nil)
+	acctKid, pk, err := acme_http.CreateAccount(ctx, CAEmail, caDir, nil)
 	if err != nil {
 		return fmt.Errorf("error in CreateAccount: %w", err)
 	}
