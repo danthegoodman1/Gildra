@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"github.com/danthegoodman1/Gildra/control_plane"
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/http_server"
 	"github.com/danthegoodman1/Gildra/internal"
+	"github.com/danthegoodman1/Gildra/observability"
 	"github.com/danthegoodman1/Gildra/utils"
 	"golang.org/x/sync/errgroup"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -37,6 +40,15 @@ func main() {
 			return nil
 		})
 	}
+
+	g.Go(func() error {
+		prometheusReporter := observability.NewPrometheusReporter()
+		err := observability.StartInternalHTTPServer(":8042", prometheusReporter)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	})
 
 	err := g.Wait()
 	if err != nil {

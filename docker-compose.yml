@@ -1,0 +1,15 @@
+version: "3"
+services:
+  gildra:
+    build: .
+    ports:
+      - 80:80
+      - 443:443
+      - 8042:8042
+    environment:
+      - PRETTY=1
+      - DEBUG=1
+  control_plane:
+    build: ./example_control_plane
+    ports:
+      - 8080:8080
