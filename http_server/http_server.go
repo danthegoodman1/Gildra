@@ -101,7 +101,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	if utils.Dev_TextResponse {
 		logger.Debug().Msg("dev response, writing text")
-		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
+		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400")
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, "DEV response\n\tproto: %s\n", r.Proto)
 		return
@@ -125,7 +125,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	if dest.DEVTextResponse {
 		logger.Debug().Msg("dev response, writing text")
-		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
+		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400")
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, "DEV response\n\tproto: %s\n", r.Proto)
 		return
@@ -184,7 +184,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Add h3 header
-	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
+	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400")
 	// Start the response
 	w.WriteHeader(originRes.StatusCode)
 
