@@ -217,12 +217,12 @@ func GetFQDNCert(ctx context.Context, fqdn string) (*tls.Certificate, error) {
 }
 
 type ChallengeTokenRes struct {
-	Token string
+	Key string
 }
 
-// GetHTTPChallengeToken fetches the HTTP challenge token from the control plane
+// GetHTTPChallengeKey fetches the HTTP challenge token from the control plane
 // to fulfil the HTTP ACME challenge.
-func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
+func GetHTTPChallengeKey(fqdn, idToken string) (string, error) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, fmt.Sprintf("%s/domains/%s/challenge/%s", utils.Env_ControlPlaneAddr, fqdn, idToken), nil)
 	if err != nil {
 		return "", fmt.Errorf("error creating new request: %w", err)
@@ -250,7 +250,7 @@ func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
 		return "", fmt.Errorf("error in Unmarshal: %w", err)
 	}
 
-	return resBody.Token, nil
+	return resBody.Key, nil
 }
 
 func (c *GetCertRes) GetCert() (*tls.Certificate, error) {

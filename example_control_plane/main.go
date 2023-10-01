@@ -48,7 +48,7 @@ func main() {
 	server.Use(middleware.LoggerWithConfig(logConfig))
 	server.GET("/echo", echoHandler)
 	server.POST("/create_cert", createCert)
-	server.GET("/domains/:domain/token/:key", getToken)
+	server.GET("/domains/:domain/token/:token", getKey)
 	server.GET("/domains/:domain/cert", getCert)
 	server.GET("/domains/:domain/config", getConfig)
 
@@ -134,7 +134,7 @@ func createCert(c echo.Context) error {
 	log.Printf("Got challenge %+v\n", challenge)
 
 	// Store the token for a key (we aren't bothering to match URL)
-	httpChallenges.Store(challenge.Key, challenge.Token)
+	httpChallenges.Store(challenge.Token, challenge.Key)
 
 	chal, err := acme_http.NotifyChallenge(ctx, caDir, acctKid, pk, *challenge)
 	if err != nil {
@@ -226,18 +226,18 @@ func getConfig(c echo.Context) error {
 	return c.JSONBlob(http.StatusOK, routingBytes)
 }
 
-func getToken(c echo.Context) error {
+func getKey(c echo.Context) error {
 	domain := c.Param("domain")
-	key := c.Param("key")
-	log.Println("getting token for domain", domain, "and key", key) // we don't care about the domain here, just logging to show we have it
-	token, found := httpChallenges.LoadAndDelete(key)
+	token := c.Param("token")
+	log.Println("getting token for domain", domain, "and token", token) // we don't care about the domain here, just logging to show we have it
+	key, found := httpChallenges.LoadAndDelete(token)
 	if !found {
 		return c.String(http.StatusNotFound, "did not have that key!")
 	}
 
 	return c.JSON(http.StatusOK, struct {
-		Token string
+		Key string
 	}{
-		Token: token,
+		Key: key,
 	})
 }
