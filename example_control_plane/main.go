@@ -160,11 +160,17 @@ func createCert(c echo.Context) error {
 func getCert(c echo.Context) error {
 	domain := c.Param("domain")
 	keyBytes, err := os.ReadFile(fmt.Sprintf("%s.key", domain))
+	if os.IsNotExist(err) {
+		return c.String(http.StatusNotFound, "tls key does not exist for "+domain)
+	}
 	if err != nil {
 		return fmt.Errorf("error in os.Readfile for key: %w", err)
 	}
 
 	certBytes, err := os.ReadFile(fmt.Sprintf("%s.cert", domain))
+	if os.IsNotExist(err) {
+		return c.String(http.StatusNotFound, "tls cert does not exist for "+domain)
+	}
 	if err != nil {
 		return fmt.Errorf("error in os.Readfile for cert: %w", err)
 	}
