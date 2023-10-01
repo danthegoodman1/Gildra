@@ -231,7 +231,7 @@ func getKey(c echo.Context) error {
 	domain := c.Param("domain")
 	token := c.Param("token")
 	log.Println("getting token for domain", domain, "and token", token) // we don't care about the domain here, just logging to show we have it
-	key, found := httpChallenges.LoadAndDelete(token)
+	key, found := httpChallenges.Load(token)
 	if !found {
 		return c.String(http.StatusNotFound, "did not have that key!")
 	}
