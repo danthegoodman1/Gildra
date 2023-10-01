@@ -4,7 +4,7 @@ services:
     build: .
     ports:
       - 80:80
-      - 443:443
+      - 443:443/tcp
       - 443:443/udp
       - 8042:8042
     environment:
