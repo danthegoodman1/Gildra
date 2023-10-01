@@ -20,7 +20,7 @@ var (
 	httpChallenges = syncx.NewMap[string, string]()
 
 	CADirURL = lo.Ternary(os.Getenv("CA_DIR") == "", "https://acme-staging-v02.api.letsencrypt.org/directory", os.Getenv("CA_DIR"))
-	CAEmail  = os.Getenv("EMAIL")
+	CAEmail  = os.Getenv("CA_EMAIL")
 )
 
 func main() {
