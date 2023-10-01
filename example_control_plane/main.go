@@ -48,7 +48,7 @@ func main() {
 	server.Use(middleware.LoggerWithConfig(logConfig))
 	server.GET("/echo", echoHandler)
 	server.POST("/create_cert", createCert)
-	server.GET("/domains/:domain/token/:token", getKey)
+	server.GET("/domains/:domain/challenge/:token", getKey)
 	server.GET("/domains/:domain/cert", getCert)
 	server.GET("/domains/:domain/config", getConfig)
 
