@@ -46,7 +46,7 @@ func main() {
 		Output:           os.Stdout, // logger or os.Stdout
 	}
 	server.Use(middleware.LoggerWithConfig(logConfig))
-	server.GET("/echo", echoHandler)
+	server.Any("/echo", echoHandler)
 	server.POST("/create_cert", createCert)
 	server.GET("/domains/:domain/challenge/:token", getKey)
 	server.GET("/domains/:domain/cert", getCert)
