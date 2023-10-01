@@ -43,6 +43,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	internal.Metric_OpenConnections.Inc()
 	defer internal.Metric_OpenConnections.Dec()
 	if upgradeHeader := r.Header.Get("Upgrade"); upgradeHeader == "h2c" {
+		fmt.Println("Marking h2c as HTTP/2.0")
 		r.Proto = "HTTP/2.0"
 	}
 	fmt.Println("Proto:", r.Proto)
@@ -95,6 +96,14 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Println("wrote response", token)
 		internal.Metric_ZEROSSL_HTTP_Challenges.Inc()
+		return
+	}
+
+	if utils.Dev_TextResponse {
+		logger.Debug().Msg("dev response, writing text")
+		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400")
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprintf(w, "DEV response\n\tproto: %s\n", r.Proto)
 		return
 	}
 

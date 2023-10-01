@@ -26,4 +26,6 @@ var (
 	Env_CertCacheMB        = MustEnvOrDefaultInt64("CERT_CACHE_MB", 10_000_000)
 	Env_ConfigCacheSeconds = MustEnvOrDefaultInt64("CONFIG_CACHE_SECONDS", 10)
 	Env_CertCacheSeconds   = MustEnvOrDefaultInt64("CERT_CACHE_SECONDS", 300)
+
+	Dev_TextResponse = os.Getenv("DEV_TEXT_RESPONSE") == "1"
 )
