@@ -5,7 +5,7 @@
         {
           "Destinations": [
             {
-              "URL": "http://localhost:8080"
+              "URL": "http://control-plane:8080"
             }
           ]
         }
