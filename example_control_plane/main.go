@@ -54,6 +54,7 @@ func main() {
 }
 
 func customHTTPErrorHandler(err error, c echo.Context) {
+	log.Println("Error handling request: ", err.Error())
 	if err := c.String(http.StatusInternalServerError, err.Error()); err != nil {
 		c.Logger().Error(err)
 	}
