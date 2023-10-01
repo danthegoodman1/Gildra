@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/danthegoodman1/Gildra/acme_http"
 	"github.com/labstack/echo/v4"
+	"github.com/samber/lo"
 	"log"
 	"net/http"
 	"os"
@@ -18,12 +19,15 @@ import (
 var (
 	httpChallenges = syncx.NewMap[string, string]()
 
-	// "https://acme-staging-v02.api.letsencrypt.org/directory"
-	CADirURL = os.Getenv("CA_DIR")
+	CADirURL = lo.Ternary(os.Getenv("CA_DIR") == "", "https://acme-staging-v02.api.letsencrypt.org/directory", os.Getenv("CA_DIR"))
 	CAEmail  = os.Getenv("EMAIL")
 )
 
 func main() {
+	if CAEmail == "" {
+		log.Fatal("Need to set the EMAIL env var!")
+	}
+
 	server := echo.New()
 	server.HideBanner = true
 	server.HidePort = true
