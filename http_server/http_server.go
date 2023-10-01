@@ -132,10 +132,8 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Replace up through the domain name with destination
-	u := r.URL.String()
-	fmt.Println("incoming url", u)
-	endOfDomain := strings.Index(u, fqdn) + len(fqdn)
-	finalURL := dest.URL + u[endOfDomain:]
+	path := r.URL.String()
+	finalURL := dest.URL + path
 
 	// Proxy the request
 	originReq, err := http.NewRequestWithContext(context.Background(), r.Method, finalURL, r.Body)
