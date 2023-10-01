@@ -27,6 +27,7 @@ func main() {
 
 	server.GET("/echo", echoHandler)
 	server.POST("/create_cert", createCert)
+	server.GET("/domains/:domain/token/:key", getToken)
 	server.GET("/domains/:domain/cert", getCert)
 	server.GET("/domains/:domain/config", getConfig)
 
@@ -137,13 +138,72 @@ func createCert(c echo.Context) error {
 
 	log.Printf("Got cert: %+v\n", resource)
 
+	// Store cert on disk
+	err = os.WriteFile(fmt.Sprintf("%s.issuer", domain), resource.IssuerCertificate, 0666)
+	if err != nil {
+		log.Fatalf("error writing issuer to disk: %s", err)
+	}
+
+	err = os.WriteFile(fmt.Sprintf("%s.key", domain), resource.PrivateKey, 0666)
+	if err != nil {
+		log.Fatalf("error writing key to disk: %s", err)
+	}
+
+	err = os.WriteFile(fmt.Sprintf("%s.cert", domain), resource.Certificate, 0666)
+	if err != nil {
+		log.Fatalf("error writing cert to disk: %s", err)
+	}
+
 	return c.String(http.StatusOK, "got cert")
 }
 
 func getCert(c echo.Context) error {
+	domain := c.Param("domain")
+	keyBytes, err := os.ReadFile(fmt.Sprintf("%s.key", domain))
+	if err != nil {
+		return fmt.Errorf("error in os.Readfile for key: %w", err)
+	}
 
+	certBytes, err := os.ReadFile(fmt.Sprintf("%s.cert", domain))
+	if err != nil {
+		return fmt.Errorf("error in os.Readfile for cert: %w", err)
+	}
+
+	return c.JSON(http.StatusOK, struct {
+		Cert string
+		Key  string
+	}{
+		Cert: string(certBytes),
+		Key:  string(keyBytes),
+	})
 }
 
 func getConfig(c echo.Context) error {
+	domain := c.Param("domain")
 
+	routingBytes, err := os.ReadFile(fmt.Sprintf("%s.json", domain))
+	if os.IsNotExist(err) {
+		return c.String(http.StatusNotFound, "routing config does not exist for "+domain)
+	}
+	if err != nil {
+		return fmt.Errorf("error in os.Readfile for routing config: %w", err)
+	}
+
+	return c.JSONBlob(http.StatusOK, routingBytes)
+}
+
+func getToken(c echo.Context) error {
+	domain := c.Param("domain")
+	key := c.Param("key")
+	log.Println("getting token for domain", domain, "and key", key) // we don't care about the domain here, just logging to show we have it
+	token, found := httpChallenges.LoadAndDelete(key)
+	if !found {
+		return c.String(http.StatusNotFound, "did not have that key!")
+	}
+
+	return c.JSON(http.StatusOK, struct {
+		Token string
+	}{
+		Token: token,
+	})
 }

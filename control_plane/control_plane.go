@@ -217,7 +217,7 @@ func GetFQDNCert(ctx context.Context, fqdn string) (*tls.Certificate, error) {
 }
 
 type ChallengeTokenRes struct {
-	Key string
+	Token string
 }
 
 // GetHTTPChallengeToken fetches the HTTP challenge token from the control plane
@@ -250,7 +250,7 @@ func GetHTTPChallengeToken(fqdn, idToken string) (string, error) {
 		return "", fmt.Errorf("error in Unmarshal: %w", err)
 	}
 
-	return resBody.Key, nil
+	return resBody.Token, nil
 }
 
 func (c *GetCertRes) GetCert() (*tls.Certificate, error) {
