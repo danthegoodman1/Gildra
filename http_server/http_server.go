@@ -155,6 +155,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	// Additional headers
 	originReq.Header.Set("X-Url-Scheme", lo.Ternary(isTLS, "https", "http"))
 	originReq.Header.Set("X-Forwarded-Proto", r.Proto)
+	originReq.Header.Set("X-Forwarded-To", finalURL)
 	originReq.Header.Set("X-Forwarded-For", func(r *http.Request) string {
 		incomingIP := strings.Split(r.RemoteAddr, ":")[0] // remove the port
 		if existing := r.Header.Get("X-Forwarded-For"); existing != "" {
