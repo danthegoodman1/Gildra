@@ -1,0 +1,2 @@
+### Basic GET
+GET http://localhost:80/echo

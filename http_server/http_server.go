@@ -107,8 +107,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Make timeout customizable
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(utils.Env_HTTPTimeoutSec))
 	defer cancel()
 
 	config, err := control_plane.GetFQDNConfig(ctx, fqdn)
@@ -133,36 +132,13 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	// Replace up through the domain name with destination
 	path := r.URL.String()
-	finalURL := dest.URL + path
 
 	// Proxy the request
-	originReq, err := http.NewRequestWithContext(context.Background(), r.Method, finalURL, r.Body)
+	originReq, err := makeOriginRequest(ctx, fqdn, dest.URL+path, isTLS, w, r)
 	if err != nil {
 		handlingError(w, r, err, "error making origin request")
 		return
 	}
-
-	// Switch in the headers, but keep original Host
-	originReq.Header = r.Header.Clone()
-
-	if utils.Env_DevDisableHost {
-		originReq.Host = ""
-	} else {
-		// Forward the host
-		originReq.Host = fqdn
-	}
-
-	// Additional headers
-	originReq.Header.Set("X-Url-Scheme", lo.Ternary(isTLS, "https", "http"))
-	originReq.Header.Set("X-Forwarded-Proto", r.Proto)
-	originReq.Header.Set("X-Forwarded-To", finalURL)
-	originReq.Header.Set("X-Forwarded-For", func(r *http.Request) string {
-		incomingIP := strings.Split(r.RemoteAddr, ":")[0] // remove the port
-		if existing := r.Header.Get("X-Forwarded-For"); existing != "" {
-			return existing + fmt.Sprintf(", %s", incomingIP)
-		}
-		return incomingIP
-	}(r))
 
 	originRes, err := http.DefaultClient.Do(originReq)
 	if err != nil {
@@ -170,6 +146,23 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer originRes.Body.Close()
+
+	// Check for replay header
+	if replayHeader := originRes.Header.Get("x-replay"); replayHeader != "" {
+		originReq, err = makeOriginRequest(ctx, fqdn, replayHeader+path, isTLS, w, r)
+		if err != nil {
+			handlingError(w, r, err, "error making origin request after replay")
+			return
+		}
+
+		originRes, err := http.DefaultClient.Do(originReq)
+		if err != nil {
+			handlingError(w, r, err, "error doing origin request after replay")
+			return
+		}
+		defer originRes.Body.Close()
+	}
+
 	fmt.Println(r.Header.Get("Connection") == "Upgrade", originRes.StatusCode, originRes.StatusCode == http.StatusSwitchingProtocols)
 
 	if r.Header.Get("Connection") == "Upgrade" && originRes.StatusCode == http.StatusSwitchingProtocols {
@@ -333,4 +326,34 @@ func handlingError(w http.ResponseWriter, r *http.Request, e error, msg string) 
 	if err != nil {
 		logger.Error().Err(err).Msg("error writing internal error to HTTP request")
 	}
+}
+
+func makeOriginRequest(ctx context.Context, fqdn, finalURL string, isTLS bool, w http.ResponseWriter, r *http.Request) (*http.Request, error) {
+	originReq, err := http.NewRequestWithContext(context.Background(), r.Method, finalURL, r.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Switch in the headers, but keep original Host
+	originReq.Header = r.Header.Clone()
+
+	if utils.Env_DevDisableHost {
+		originReq.Host = ""
+	} else {
+		// Forward the host
+		originReq.Host = fqdn
+	}
+
+	// Additional headers
+	originReq.Header.Set("X-Url-Scheme", lo.Ternary(isTLS, "https", "http"))
+	originReq.Header.Set("X-Forwarded-Proto", r.Proto)
+	originReq.Header.Set("X-Forwarded-To", finalURL)
+	originReq.Header.Set("X-Forwarded-For", func(r *http.Request) string {
+		incomingIP := strings.Split(r.RemoteAddr, ":")[0] // remove the port
+		if existing := r.Header.Get("X-Forwarded-For"); existing != "" {
+			return existing + fmt.Sprintf(", %s", incomingIP)
+		}
+		return incomingIP
+	}(r))
+	return originReq, nil
 }

@@ -49,7 +49,7 @@ The keys for each challenge token must be served by the Control Plane.
 - `X-Forwarded-Proto` - the protocol in which the inbound connection was made to the Gildra node. Options `HTTP/1.1`, `HTTP/2.0`, `HTTP/3.0`
 - `X-Forwarded-To` This is the destination (e.g. `http://internal-domain/path-prefix`) that the request was forwarded to, as the host header and path are based on the incoming request, this is based on the destination match. This is useful for when you have something like a tenant ID in a subdomain (e.g. `{tenant}.internal-dash.domain.com`), and can easily pull the tenant ID out of the subdomain instead of doing a reverse domain name lookup of the host header in your DB.
 - `X-Url-Scheme` - the URL scheme of the request made to Gildra. Options `https`, `http`, `ws`, `wss`
-- `X-Replayed` - whether this request was replayed. Options `t`, `f`
+- `X-Replayed` - whether this request was replayed. `t` if replayed, otherwise the header is absent. 
 
 ## The `x-replay` header
 

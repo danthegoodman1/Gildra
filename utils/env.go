@@ -27,5 +27,7 @@ var (
 	Env_ConfigCacheSeconds = MustEnvOrDefaultInt64("CONFIG_CACHE_SECONDS", 10)
 	Env_CertCacheSeconds   = MustEnvOrDefaultInt64("CERT_CACHE_SECONDS", 300)
 
+	Env_HTTPTimeoutSec = MustEnvOrDefaultInt64("HTTP_TIMEOUT_SEC", 60)
+
 	Dev_TextResponse = os.Getenv("DEV_TEXT_RESPONSE") == "1"
 )

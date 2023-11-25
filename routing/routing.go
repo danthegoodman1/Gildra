@@ -30,7 +30,7 @@ type (
 		// ONLY FOR DEV USE will respond with just some text, used for checking certs
 		DEVTextResponse bool `json:",omitempty"`
 
-		// URL will replace the http(s)://example.com with this
+		// URL will replace the all but the path (`http(s)://example.com`) with this value.
 		// For example with a value of `http://internal:8080/prefix` and an original request of
 		// https://example.com/abc the final request will be constructed as `http://internal:8080/prefix/abc`
 		URL string `json:",omitempty" validate:"require"`
