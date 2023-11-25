@@ -40,6 +40,7 @@ func main() {
 			`"host":"${host}","method":"${method}","uri":"${uri}","user_agent":"${user_agent}",` +
 			`"status":${status},"error":"${error}","latency":${latency},"latency_human":"${latency_human}",` +
 			`"bytes_in":${bytes_in},"bytes_out":${bytes_out},"proto":"${protocol}",` +
+			`"replayed":${header:x-replayed}` +
 			// fake request headers for getting info into http logs
 			`"userID":"${header:loguserid}","reqID":"${header:reqID}","wasCached":"${header:wasCached}"}` + "\n",
 		CustomTimeFormat: "2006-01-02 15:04:05.00000",
@@ -89,6 +90,10 @@ func echoHandler(c echo.Context) error {
 	s.WriteString("\tQuery:\n")
 	for key, vals := range c.Request().URL.Query() {
 		for _, val := range vals {
+			if replayHeader := c.Request().Header.Get("X-Replayed"); key == "replay_lim" && replayHeader < val {
+				fmt.Println("replaying with lim "+val, replayHeader)
+				c.Response().Header().Set("x-replay", "http://control-plane:8080") // add self replay
+			}
 			s.WriteString(fmt.Sprintf("\t\t%s: %s\n", key, val))
 		}
 	}
