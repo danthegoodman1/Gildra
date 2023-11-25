@@ -49,15 +49,15 @@ The keys for each challenge token must be served by the Control Plane.
 - `X-Forwarded-Proto` - the protocol in which the inbound connection was made to the Gildra node. Options `HTTP/1.1`, `HTTP/2.0`, `HTTP/3.0`
 - `X-Forwarded-To` This is the destination (e.g. `http://internal-domain/path-prefix`) that the request was forwarded to, as the host header and path are based on the incoming request, this is based on the destination match. This is useful for when you have something like a tenant ID in a subdomain (e.g. `{tenant}.internal-dash.domain.com`), and can easily pull the tenant ID out of the subdomain instead of doing a reverse domain name lookup of the host header in your DB.
 - `X-Url-Scheme` - the URL scheme of the request made to Gildra. Options `https`, `http`, `ws`, `wss`
-- `X-Replayed` - whether this request was replayed. `t` if replayed, otherwise the header is absent. 
+- `X-Replayed` - whether this request was replayed. The previous number of replays if replayed, otherwise the header is absent. 
 
 ## The `x-replay` header
 
 If your response has a status code of < 500 and has an `x-replay` header, then the request will be replayed by the Gildra node targeting the address provided in the `x-replay` header.
 
-This allows you to relay a request to a specific IP address or domain within your private network.
+This allows you to relay a request to a specific IP address or domain (including protocol) within your private network.
 
-If you respond with an `x-replay` header to a request that already contains an `X-Replayed` header, then Gildra will respond to the original request with a `502 Bad Gateway`. Gildra will appropriately strip this header from client's requests. 
+If you exceed the `MAX_REPLAYS` env var (default `3`) for a single request then it will return a `502 Bad Gateway` to the client and log a warning.
 
 ## Metrics
 

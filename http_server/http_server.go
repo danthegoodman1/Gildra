@@ -112,13 +112,13 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	config, err := control_plane.GetFQDNConfig(ctx, fqdn)
 	if err != nil {
-		handlingError(w, r, err, "error in control_plane.GetFQDNConfig")
+		handlingError(w, err, "error in control_plane.GetFQDNConfig")
 		return
 	}
 
 	dest, err := config.MatchDestination(r)
 	if err != nil {
-		handlingError(w, r, err, "error in config.MatchDestination")
+		handlingError(w, err, "error in config.MatchDestination")
 		return
 	}
 
@@ -134,33 +134,52 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.String()
 
 	// Proxy the request
-	originReq, err := makeOriginRequest(ctx, fqdn, dest.URL+path, isTLS, w, r)
+	originReq, err := makeOriginRequest(ctx, fqdn, dest.URL+path, isTLS, r)
 	if err != nil {
-		handlingError(w, r, err, "error making origin request")
+		handlingError(w, err, "error making origin request")
 		return
 	}
 
 	originRes, err := http.DefaultClient.Do(originReq)
 	if err != nil {
-		handlingError(w, r, err, "error doing origin request")
+		handlingError(w, err, "error doing origin request")
 		return
 	}
 	defer originRes.Body.Close()
 
 	// Check for replay header
-	if replayHeader := originRes.Header.Get("x-replay"); replayHeader != "" {
-		originReq, err = makeOriginRequest(ctx, fqdn, replayHeader+path, isTLS, w, r)
+	var replays int64 = 0
+	replayHeader := originRes.Header.Get("x-replay")
+	for replayHeader != "" && replays < utils.Env_MaxReplays && originRes.StatusCode < 500 {
+		logger.Debug().Msg("replaying request")
+		originReq, err = makeOriginRequest(ctx, fqdn, replayHeader+path, isTLS, r)
 		if err != nil {
-			handlingError(w, r, err, "error making origin request after replay")
+			handlingError(w, err, "error making origin request after replay")
 			return
 		}
+		originReq.Header.Set("X-Replayed", fmt.Sprint(replays))
 
-		originRes, err := http.DefaultClient.Do(originReq)
+		originRes, err = http.DefaultClient.Do(originReq)
 		if err != nil {
-			handlingError(w, r, err, "error doing origin request after replay")
+			handlingError(w, err, "error doing origin request after replay")
 			return
 		}
 		defer originRes.Body.Close()
+
+		replayHeader = originRes.Header.Get("x-replay")
+		replays++
+	}
+
+	if replays >= utils.Env_MaxReplays && replayHeader != "" {
+		// We hit the limit
+		// TODO: Include request context
+		logger.Warn().Msg("exceeded max loops, sending error to client")
+		w.WriteHeader(http.StatusBadGateway)
+		_, err := fmt.Fprint(w, "exceeded replays")
+		if err != nil {
+			logger.Error().Err(err).Msg("error writing internal error to HTTP request")
+		}
+		return
 	}
 
 	fmt.Println(r.Header.Get("Connection") == "Upgrade", originRes.StatusCode, originRes.StatusCode == http.StatusSwitchingProtocols)
@@ -195,7 +214,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 func handleUpgradeResponse(rw http.ResponseWriter, req *http.Request, res *http.Response) {
 	if req.Header.Get("Upgrade") != res.Header.Get("Upgrade") {
-		handlingError(rw, req, errors.New("mismatched upgrade headers"), "error checking upgrade headers")
+		handlingError(rw, errors.New("mismatched upgrade headers"), "error checking upgrade headers")
 		return
 	}
 
@@ -319,7 +338,7 @@ func Shutdown(ctx context.Context) error {
 }
 
 // handles writing the error, should always return after calling this
-func handlingError(w http.ResponseWriter, r *http.Request, e error, msg string) {
+func handlingError(w http.ResponseWriter, e error, msg string) {
 	logger.Error().Err(e).Msg(msg)
 	w.WriteHeader(http.StatusInternalServerError)
 	_, err := fmt.Fprint(w, "internal error")
@@ -328,8 +347,8 @@ func handlingError(w http.ResponseWriter, r *http.Request, e error, msg string) 
 	}
 }
 
-func makeOriginRequest(ctx context.Context, fqdn, finalURL string, isTLS bool, w http.ResponseWriter, r *http.Request) (*http.Request, error) {
-	originReq, err := http.NewRequestWithContext(context.Background(), r.Method, finalURL, r.Body)
+func makeOriginRequest(ctx context.Context, fqdn, finalURL string, isTLS bool, r *http.Request) (*http.Request, error) {
+	originReq, err := http.NewRequestWithContext(ctx, r.Method, finalURL, r.Body)
 	if err != nil {
 		return nil, err
 	}
