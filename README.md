@@ -59,6 +59,10 @@ This allows you to relay a request to a specific IP address or domain (including
 
 If you exceed the `MAX_REPLAYS` env var (default `3`) for a single request then it will return a `502 Bad Gateway` to the client and log a warning.
 
+## Tracing
+
+OTLP Tracing can be configured with the `TRACING` (`== 1`, default off), `OLTP_ENDPOINT`, and `TRACING_SERVICE_NAME` (default `gildra`) environment variables. If an `OTLP_ENDPOINT` is not provided, it will pretty-print to stdout for debug.
+
 ## Metrics
 
 The metrics server is run by default in port `8091`. This can be changed with the `INTERNAL_PORT` env var. Metrics will be served at `/metrics`.

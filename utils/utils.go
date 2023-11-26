@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"github.com/segmentio/ksuid"
 	"log"
 	"os"
 	"strconv"
@@ -25,4 +26,8 @@ func MustEnvOrDefaultInt64(env string, defaultVal int64) int64 {
 		log.Fatalf("failed to convert env var %s to an int", env)
 	}
 	return int64(intVar)
+}
+
+func GenKSortedID(prefix string) string {
+	return prefix + ksuid.New().String()
 }

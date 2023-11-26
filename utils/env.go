@@ -31,4 +31,8 @@ var (
 	Env_MaxReplays     = MustEnvOrDefaultInt64("MAX_REPLAYS", 3)
 
 	Dev_TextResponse = os.Getenv("DEV_TEXT_RESPONSE") == "1"
+
+	Env_TracingEnabled     = os.Getenv("TRACING") == "1"
+	Env_OLTPEndpoint       = os.Getenv("OLTP_ENDPOINT")
+	Env_TracingServiceName = EnvOrDefault("TRACING_SERVICE_NAME", "gildra")
 )
