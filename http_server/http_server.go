@@ -19,7 +19,6 @@ import (
 	"golang.org/x/net/http2/h2c"
 	"golang.org/x/sync/errgroup"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"path"
@@ -65,7 +64,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	internal.Metric_OpenConnections.Inc()
 	defer internal.Metric_OpenConnections.Dec()
 	if upgradeHeader := r.Header.Get("Upgrade"); upgradeHeader == "h2c" {
-		fmt.Println("Marking h2c as HTTP/2.0")
+		logger.Debug().Msg(fmt.Sprint("Marking h2c as HTTP/2.0"))
 		r.Proto = "HTTP/2.0"
 	}
 	logger.Debug().Msg(fmt.Sprint("Proto:", r.Proto))
@@ -82,14 +81,14 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger.Debug().Msgf("got ACME HTTP challenge request for FQDN %s", fqdn)
 
 		_, token := path.Split(r.URL.Path)
-		fmt.Println("Got challenge for fqdn", fqdn, "token", token)
+		logger.Debug().Msg(fmt.Sprint("Got challenge for fqdn", fqdn, "token", token))
 		key, err := control_plane.GetHTTPChallengeKey(fqdn, token)
 		if err != nil {
 			logger.Error().Err(err).Msgf("error in GetHTTPChallengeToken for FQDN %s", fqdn)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		fmt.Println("Got key", key)
+		logger.Debug().Msg(fmt.Sprint("Got key", key))
 		w.WriteHeader(http.StatusOK)
 		_, err = w.Write([]byte(key))
 		if err != nil {
@@ -97,7 +96,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		fmt.Println("wrote response", key)
+		logger.Debug().Msg(fmt.Sprint("wrote response", key))
 		internal.Metric_ACME_HTTP_Challenges.Inc()
 		return
 	} else if strings.HasPrefix(r.URL.Path, ZeroSSLPathPrefix) {
@@ -105,14 +104,14 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger.Debug().Msgf("got ZeroSSL HTTP challenge request for FQDN %s", fqdn)
 
 		_, token := path.Split(r.URL.Path)
-		fmt.Println("Got challenge for fqdn", fqdn, "token", token)
+		logger.Debug().Msg(fmt.Sprint("Got challenge for fqdn", fqdn, "token", token))
 		key, err := control_plane.GetHTTPChallengeKey(fqdn, token)
 		if err != nil {
 			logger.Error().Err(err).Msgf("error in GetHTTPChallengeToken for FQDN %s", fqdn)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		fmt.Println("Got key", key)
+		logger.Debug().Msg(fmt.Sprint("Got key", key))
 		w.WriteHeader(http.StatusOK)
 		_, err = w.Write([]byte(key))
 		if err != nil {
@@ -120,7 +119,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		fmt.Println("wrote response", key)
+		logger.Debug().Msg(fmt.Sprint("wrote response", key))
 		internal.Metric_ZEROSSL_HTTP_Challenges.Inc()
 		return
 	}
@@ -209,7 +208,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println(r.Header.Get("Connection") == "Upgrade", originRes.StatusCode, originRes.StatusCode == http.StatusSwitchingProtocols)
+	logger.Debug().Msg(fmt.Sprint(r.Header.Get("Connection") == "Upgrade", originRes.StatusCode, originRes.StatusCode == http.StatusSwitchingProtocols))
 
 	if r.Header.Get("Connection") == "Upgrade" && originRes.StatusCode == http.StatusSwitchingProtocols {
 		// Websocket
@@ -243,6 +242,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 func handleUpgradeResponse(ctx context.Context, rw http.ResponseWriter, req *http.Request, res *http.Response) {
 	ctx, span := otel.Tracer("gildra").Start(ctx, "handleUpgradeResponse")
 	defer span.End()
+	logger := zerolog.Ctx(ctx)
 
 	if req.Header.Get("Upgrade") != res.Header.Get("Upgrade") {
 		respondInternalError(span, rw, errors.New("mismatched upgrade headers"), "error checking upgrade headers")
@@ -251,31 +251,31 @@ func handleUpgradeResponse(ctx context.Context, rw http.ResponseWriter, req *htt
 
 	backConn, ok := res.Body.(io.ReadWriteCloser)
 	if !ok {
-		log.Fatalln("failed to cast response body to readwritecloser")
+		logger.Fatal().Msg("failed to cast response body to readwritecloser")
 		return
 	}
 	defer backConn.Close()
 
 	hj, ok := rw.(http.Hijacker)
 	if !ok {
-		log.Fatalln("failed to cast responsewriter to hijacker")
+		logger.Fatal().Msg("failed to cast responsewriter to hijacker")
 		return
 	}
 
 	conn, brw, err := hj.Hijack()
 	if err != nil {
-		log.Fatalf("Failed to hijack: %s\n", err)
+		logger.Fatal().Msgf("Failed to hijack: %s\n", err)
 		return
 	}
 	defer conn.Close()
 
 	res.Body = nil // res.Write only writes the headers; we have res.Body in backConn above
 	if err := res.Write(brw); err != nil {
-		log.Fatalf("Failed to write headers: %s\n", err)
+		logger.Fatal().Msgf("Failed to write headers: %s\n", err)
 		return
 	}
 	if err := brw.Flush(); err != nil {
-		log.Fatalf("Failed to flush headers: %s\n", err)
+		logger.Fatal().Msgf("Failed to flush headers: %s\n", err)
 		return
 	}
 
@@ -291,7 +291,7 @@ func handleUpgradeResponse(ctx context.Context, rw http.ResponseWriter, req *htt
 	if err != nil {
 		fmt.Printf("Error with websocket: %s\n", err)
 	} else {
-		fmt.Println("Websocket hung up")
+		logger.Debug().Msg(fmt.Sprint("Websocket hung up"))
 	}
 	return
 }
@@ -301,7 +301,11 @@ func StartServers() error {
 		GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
+			logger := zerolog.Ctx(ctx)
 			fqdn := info.ServerName
+			logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
+				return c.Str("fqdn", fqdn)
+			})
 			opts := []trace.SpanStartOption{
 				trace.WithSpanKind(trace.SpanKindServer),
 			}
@@ -311,7 +315,7 @@ func StartServers() error {
 
 			// You can use info.ServerName to determine which certificate to load
 			logger.Debug().Msgf("fetching cert for fqdn %s", fqdn)
-			fmt.Println("Getting cert for fqdn", fqdn)
+			logger.Debug().Msg(fmt.Sprint("Getting cert for fqdn", fqdn))
 
 			// Load the certificate
 			cert, err := control_plane.GetFQDNCert(ctx, fqdn)
