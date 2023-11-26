@@ -11,6 +11,7 @@ services:
       - PRETTY=1
       - DEBUG=1
       - CP_ADDR=http://control-plane:8080
+      - TRACING=1
   control-plane:
     build: ./example_control_plane
     ports:

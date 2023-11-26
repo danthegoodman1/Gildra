@@ -8,7 +8,9 @@ import (
 	"github.com/danthegoodman1/Gildra/http_server"
 	"github.com/danthegoodman1/Gildra/internal"
 	"github.com/danthegoodman1/Gildra/observability"
+	"github.com/danthegoodman1/Gildra/tracing"
 	"github.com/danthegoodman1/Gildra/utils"
+	"go.opentelemetry.io/otel/sdk/trace"
 	"golang.org/x/sync/errgroup"
 	"net/http"
 	"os"
@@ -38,6 +40,15 @@ func main() {
 			logger.Debug().Msg("starting groupcache")
 			control_plane.InitCache(mainCtx)
 			return nil
+		})
+	}
+
+	var tracer *trace.TracerProvider
+	if utils.Env_TracingEnabled {
+		logger.Info().Msg("enabling tracing")
+		g.Go(func() (err error) {
+			tracer, err = tracing.InitTracer(mainCtx)
+			return
 		})
 	}
 
@@ -77,6 +88,11 @@ func main() {
 	g.Go(func() error {
 		return internal.Shutdown(ctx)
 	})
+	if tracer != nil {
+		g.Go(func() error {
+			return tracer.Shutdown(mainCtx)
+		})
+	}
 	if utils.CacheEnabled {
 		g.Go(func() error {
 			return control_plane.StopCache(ctx)

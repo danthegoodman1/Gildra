@@ -14,6 +14,8 @@ import (
 	"github.com/danthegoodman1/Gildra/utils"
 	"github.com/mailgun/groupcache/v2"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"io"
 	"net/http"
 	"strings"
@@ -106,6 +108,11 @@ func StopCache(ctx context.Context) error {
 
 // Bytes of routing.Config
 func getFQDNConfigBytes(ctx context.Context, fqdn string) ([]byte, error) {
+	ctx, span := otel.Tracer("gildra").Start(ctx, "getFQDNConfigBytes")
+	defer span.End()
+	span.SetAttributes(attribute.String("fqdn", fqdn))
+	span.SetAttributes(attribute.Bool("cached", false))
+
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/domains/%s/config", utils.Env_ControlPlaneAddr, fqdn), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating new request: %w", err)
@@ -132,6 +139,11 @@ func getFQDNConfigBytes(ctx context.Context, fqdn string) ([]byte, error) {
 
 // Bytes of control_plane.GetCertRes
 func getFQDNCertBytes(ctx context.Context, fqdn string) ([]byte, error) {
+	ctx, span := otel.Tracer("gildra").Start(ctx, "getFQDNCertBytes")
+	defer span.End()
+	span.SetAttributes(attribute.String("fqdn", fqdn))
+	span.SetAttributes(attribute.Bool("cached", false))
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/domains/%s/cert", utils.Env_ControlPlaneAddr, fqdn), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating new request: %w", err)
@@ -157,6 +169,10 @@ func getFQDNCertBytes(ctx context.Context, fqdn string) ([]byte, error) {
 }
 
 func GetFQDNConfig(ctx context.Context, fqdn string) (*routing.Config, error) {
+	ctx, span := otel.Tracer("gildra").Start(ctx, "GetFQDNConfig")
+	defer span.End()
+	span.SetAttributes(attribute.String("fqdn", fqdn))
+
 	var b []byte
 	var err error
 	if utils.CacheEnabled {
@@ -187,6 +203,10 @@ type GetCertRes struct {
 }
 
 func GetFQDNCert(ctx context.Context, fqdn string) (*tls.Certificate, error) {
+	ctx, span := otel.Tracer("gildra").Start(ctx, "GetFQDNCert")
+	defer span.End()
+	span.SetAttributes(attribute.String("fqdn", fqdn))
+
 	var b []byte
 	var err error
 	if utils.CacheEnabled {

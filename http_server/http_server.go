@@ -10,7 +10,11 @@ import (
 	"github.com/danthegoodman1/Gildra/utils"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	"github.com/rs/zerolog"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/context"
 	"golang.org/x/net/http2/h2c"
 	"golang.org/x/sync/errgroup"
@@ -40,20 +44,41 @@ const (
 )
 
 var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fqdn := r.Host
+	isTLS := r.TLS != nil
+	ctx := context.Background()
+
+	logger := zerolog.Ctx(ctx)
+
+	ctx, span := otel.Tracer("gildra").Start(ctx, "HTTPHandler")
+	defer span.End()
+
+	requestID := utils.GenKSortedID("req_")
+	span.SetAttributes(attribute.String("fqdn", fqdn))
+	span.SetAttributes(attribute.Bool("tls", isTLS))
+	span.SetAttributes(attribute.String("requestID", requestID))
+
+	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
+		return c.Str("fqdn", fqdn).Bool("tls", isTLS).Str("requestID", requestID)
+	})
+
 	internal.Metric_OpenConnections.Inc()
 	defer internal.Metric_OpenConnections.Dec()
 	if upgradeHeader := r.Header.Get("Upgrade"); upgradeHeader == "h2c" {
 		fmt.Println("Marking h2c as HTTP/2.0")
 		r.Proto = "HTTP/2.0"
 	}
-	fmt.Println("Proto:", r.Proto)
-	fmt.Println("Headers:", r.Header)
-	fmt.Println("Host:", r.Host)
+	logger.Debug().Msg(fmt.Sprint("Proto:", r.Proto))
+	logger.Debug().Msg(fmt.Sprint("Headers:", r.Header))
+	logger.Debug().Msg(fmt.Sprint("Host:", r.Host))
+	span.SetAttributes(attribute.String("proto", r.Proto))
+	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
+		return c.Str("proto", r.Proto)
+	})
 
 	// Check for an ACME challenge
-	fqdn := r.Host
-	isTLS := r.TLS != nil
 	if strings.HasPrefix(r.URL.Path, ACMEPathPrefix) || strings.HasPrefix(r.URL.Path, ACMETestPathPrefix) {
+		span.SetAttributes(attribute.Bool("acmeChallenge", true))
 		logger.Debug().Msgf("got ACME HTTP challenge request for FQDN %s", fqdn)
 
 		_, token := path.Split(r.URL.Path)
@@ -76,6 +101,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		internal.Metric_ACME_HTTP_Challenges.Inc()
 		return
 	} else if strings.HasPrefix(r.URL.Path, ZeroSSLPathPrefix) {
+		span.SetAttributes(attribute.Bool("zeroSSLChallenge", true))
 		logger.Debug().Msgf("got ZeroSSL HTTP challenge request for FQDN %s", fqdn)
 
 		_, token := path.Split(r.URL.Path)
@@ -107,18 +133,18 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(utils.Env_HTTPTimeoutSec))
+	ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(utils.Env_HTTPTimeoutSec))
 	defer cancel()
 
 	config, err := control_plane.GetFQDNConfig(ctx, fqdn)
 	if err != nil {
-		handlingError(w, err, "error in control_plane.GetFQDNConfig")
+		respondInternalError(span, w, err, "error in control_plane.GetFQDNConfig")
 		return
 	}
 
 	dest, err := config.MatchDestination(r)
 	if err != nil {
-		handlingError(w, err, "error in config.MatchDestination")
+		respondInternalError(span, w, err, "error in config.MatchDestination")
 		return
 	}
 
@@ -136,13 +162,13 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	// Proxy the request
 	originReq, err := makeOriginRequest(ctx, fqdn, dest.URL+path, isTLS, r)
 	if err != nil {
-		handlingError(w, err, "error making origin request")
+		respondInternalError(span, w, err, "error making origin request")
 		return
 	}
 
-	originRes, err := http.DefaultClient.Do(originReq)
+	originRes, err := doOriginRequest(ctx, originReq)
 	if err != nil {
-		handlingError(w, err, "error doing origin request")
+		respondInternalError(span, w, err, "error doing origin request")
 		return
 	}
 	defer originRes.Body.Close()
@@ -151,17 +177,19 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	var replays int64 = 0
 	replayHeader := originRes.Header.Get("x-replay")
 	for replayHeader != "" && replays < utils.Env_MaxReplays && originRes.StatusCode < 500 {
+		span.SetAttributes(attribute.Bool("replaying", true))
+		span.SetAttributes(attribute.Int64("replays", replays))
 		logger.Debug().Msg("replaying request")
 		originReq, err = makeOriginRequest(ctx, fqdn, replayHeader+path, isTLS, r)
 		if err != nil {
-			handlingError(w, err, "error making origin request after replay")
+			respondInternalError(span, w, err, "error making origin request after replay")
 			return
 		}
 		originReq.Header.Set("X-Replayed", fmt.Sprint(replays))
 
-		originRes, err = http.DefaultClient.Do(originReq)
+		originRes, err = doOriginRequest(ctx, originReq)
 		if err != nil {
-			handlingError(w, err, "error doing origin request after replay")
+			respondInternalError(span, w, err, "error doing origin request after replay")
 			return
 		}
 		defer originRes.Body.Close()
@@ -172,7 +200,6 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	if replays >= utils.Env_MaxReplays && replayHeader != "" {
 		// We hit the limit
-		// TODO: Include request context
 		logger.Warn().Msg("exceeded max loops, sending error to client")
 		w.WriteHeader(http.StatusBadGateway)
 		_, err := fmt.Fprint(w, "exceeded replays")
@@ -186,7 +213,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	if r.Header.Get("Connection") == "Upgrade" && originRes.StatusCode == http.StatusSwitchingProtocols {
 		// Websocket
-		handleUpgradeResponse(w, originReq, originRes)
+		handleUpgradeResponse(ctx, w, originReq, originRes)
 		return
 	}
 
@@ -200,6 +227,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400")
 	// Start the response
 	w.WriteHeader(originRes.StatusCode)
+	span.SetAttributes(attribute.Int("status", originRes.StatusCode))
 
 	// Pump the body
 	_, err = io.Copy(w, originRes.Body)
@@ -212,9 +240,12 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	return
 })
 
-func handleUpgradeResponse(rw http.ResponseWriter, req *http.Request, res *http.Response) {
+func handleUpgradeResponse(ctx context.Context, rw http.ResponseWriter, req *http.Request, res *http.Response) {
+	ctx, span := otel.Tracer("gildra").Start(ctx, "handleUpgradeResponse")
+	defer span.End()
+
 	if req.Header.Get("Upgrade") != res.Header.Get("Upgrade") {
-		handlingError(rw, errors.New("mismatched upgrade headers"), "error checking upgrade headers")
+		respondInternalError(span, rw, errors.New("mismatched upgrade headers"), "error checking upgrade headers")
 		return
 	}
 
@@ -268,14 +299,21 @@ func handleUpgradeResponse(rw http.ResponseWriter, req *http.Request, res *http.
 func StartServers() error {
 	tlsConfig := &tls.Config{
 		GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			// You can use info.ServerName to determine which certificate to load
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
 			fqdn := info.ServerName
+			opts := []trace.SpanStartOption{
+				trace.WithSpanKind(trace.SpanKindServer),
+			}
+			ctx, span := otel.Tracer("gildra").Start(ctx, "GetCertificate", opts...)
+			defer span.End()
+			span.SetAttributes(attribute.String("fqdn", fqdn))
+
+			// You can use info.ServerName to determine which certificate to load
 			logger.Debug().Msgf("fetching cert for fqdn %s", fqdn)
 			fmt.Println("Getting cert for fqdn", fqdn)
 
 			// Load the certificate
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			defer cancel()
 			cert, err := control_plane.GetFQDNCert(ctx, fqdn)
 			if err != nil {
 				logger.Error().Err(err).Msg("error in control_plane.GetFQDNCert")
@@ -338,9 +376,10 @@ func Shutdown(ctx context.Context) error {
 }
 
 // handles writing the error, should always return after calling this
-func handlingError(w http.ResponseWriter, e error, msg string) {
+func respondInternalError(span trace.Span, w http.ResponseWriter, e error, msg string) {
 	logger.Error().Err(e).Msg(msg)
 	w.WriteHeader(http.StatusInternalServerError)
+	span.SetAttributes(attribute.Int("status", http.StatusInternalServerError))
 	_, err := fmt.Fprint(w, "internal error")
 	if err != nil {
 		logger.Error().Err(err).Msg("error writing internal error to HTTP request")
@@ -375,4 +414,14 @@ func makeOriginRequest(ctx context.Context, fqdn, finalURL string, isTLS bool, r
 		return incomingIP
 	}(r))
 	return originReq, nil
+}
+
+func doOriginRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	ctx, span := otel.Tracer("gildra").Start(ctx, "doOriginRequest")
+	defer span.End()
+	res, err := http.DefaultClient.Do(req)
+	if res != nil {
+		span.SetAttributes(attribute.Int("originResponseStatus", res.StatusCode))
+	}
+	return res, err
 }
