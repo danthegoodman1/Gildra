@@ -46,6 +46,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	fqdn := r.Host
 	isTLS := r.TLS != nil
 	ctx := context.Background()
+	start := time.Now()
 
 	logger := zerolog.Ctx(ctx)
 
@@ -58,7 +59,7 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(attribute.String("requestID", requestID))
 
 	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
-		return c.Str("fqdn", fqdn).Bool("tls", isTLS).Str("requestID", requestID)
+		return c.Str("fqdn", fqdn).Bool("tls", isTLS).Str("requestID", requestID).Int64("requestLength", r.ContentLength)
 	})
 
 	internal.Metric_OpenConnections.Inc()
@@ -175,6 +176,14 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	// Check for replay header
 	var replays int64 = 0
 	replayHeader := originRes.Header.Get("x-replay")
+	if replayHeader != "" {
+		logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
+			return c.Str("replayHeader", replayHeader).Int64("replays", replays)
+		})
+	}
+
+	logger.Info().Msg("request")
+
 	for replayHeader != "" && replays < utils.Env_MaxReplays && originRes.StatusCode < 500 {
 		span.SetAttributes(attribute.Bool("replaying", true))
 		span.SetAttributes(attribute.Int64("replays", replays))
@@ -210,7 +219,18 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	logger.Debug().Msg(fmt.Sprint(r.Header.Get("Connection") == "Upgrade", originRes.StatusCode, originRes.StatusCode == http.StatusSwitchingProtocols))
 
+	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
+		return c.Int("status", originRes.StatusCode).Int64("responseLength", originRes.ContentLength)
+	})
+
+	defer func() {
+		logger.Info().Int64("ms", time.Now().Sub(start).Milliseconds()).Msg("response")
+	}()
+
 	if r.Header.Get("Connection") == "Upgrade" && originRes.StatusCode == http.StatusSwitchingProtocols {
+		logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
+			return c.Bool("websocket", true)
+		})
 		// Websocket
 		handleUpgradeResponse(ctx, w, originReq, originRes)
 		return

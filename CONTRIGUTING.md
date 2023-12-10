@@ -27,6 +27,8 @@ DEV_DISABLE_HOST=1
 
 # instead of hitting a host, just returns a text body response
 DEV_TEXT_RESPONSE=1
+
+HTTP_LOGS=1
 ```
 
 Then run `task` to run the taskfile with the `.env` environment loaded in

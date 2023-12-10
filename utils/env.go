@@ -35,4 +35,6 @@ var (
 	Env_TracingEnabled     = os.Getenv("TRACING") == "1"
 	Env_OLTPEndpoint       = os.Getenv("OLTP_ENDPOINT")
 	Env_TracingServiceName = EnvOrDefault("TRACING_SERVICE_NAME", "gildra")
+
+	Env_HTTPLogsEnabled = os.Getenv("HTTP_LOGS") == "1"
 )
