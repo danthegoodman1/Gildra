@@ -75,8 +75,11 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		return c.Str("proto", r.Proto)
 	})
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(utils.Env_HTTPTimeoutSec))
-	defer cancel()
+	if utils.Env_HTTPTimeoutSec > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(utils.Env_HTTPTimeoutSec))
+		defer cancel()
+	}
 
 	// Check for an ACME challenge
 	if strings.HasPrefix(r.URL.Path, ACMEPathPrefix) || strings.HasPrefix(r.URL.Path, ACMETestPathPrefix) || strings.HasPrefix(r.URL.Path, ZeroSSLPathPrefix) {
@@ -118,6 +121,13 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, "DEV response\n\tproto: %s\n", r.Proto)
 		return
+	}
+
+	if dest.TimeoutSec != nil {
+		// If we have a timeout override, set it
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(*dest.TimeoutSec))
+		defer cancel()
 	}
 
 	// Proxy the request
@@ -361,13 +371,21 @@ func Shutdown(ctx context.Context) error {
 	return g.Wait()
 }
 
-// handles writing the error, should always return after calling this
+// handles writing the error, should always return after calling this. Has overrides for common errors
+// like context.DeadlineExceeded
 func respondServerError(ctx context.Context, span trace.Span, w http.ResponseWriter, status int, e error, msg string) {
-	logger := zerolog.Ctx(ctx)
-	logger.Error().Err(e).Msg(msg)
-	w.WriteHeader(status)
 	span.SetAttributes(attribute.Int("status", status))
-	_, err := fmt.Fprint(w, "internal error")
+	logger := zerolog.Ctx(ctx)
+	var err error
+	if errors.Is(e, context.DeadlineExceeded) {
+		logger.Warn().Err(e).Msg("request deadline exceeded")
+		w.WriteHeader(http.StatusRequestTimeout)
+		_, err = fmt.Fprint(w, "internal error")
+	} else {
+		logger.Error().Err(e).Msg(msg)
+		w.WriteHeader(status)
+		_, err = fmt.Fprint(w, "internal error")
+	}
 	if err != nil {
 		logger.Error().Err(err).Msg("error writing internal error to HTTP request")
 	}
