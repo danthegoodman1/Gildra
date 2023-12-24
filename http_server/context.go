@@ -32,7 +32,7 @@ type (
 		Destination *routing.Destination
 
 		responseHeaders http.Header
-		responseReader  io.Reader
+		responseReader  io.ReadCloser
 		responseStatus  int
 
 		hijacked bool
@@ -47,6 +47,7 @@ func NewRequestContext(r *http.Request, rw http.ResponseWriter) *RequestContext 
 		FQDN:           r.Host,
 		ReqID:          utils.GenKSortedID("req_"),
 		IsTLS:          r.TLS != nil,
+		Proto:          r.Proto,
 
 		// Replace up through the domain name with destination
 		// this only works because incoming requests don't have the scheme and host attached to the URL
@@ -68,11 +69,12 @@ func NewRequestContext(r *http.Request, rw http.ResponseWriter) *RequestContext 
 
 	// Write HTTP/3 support header
 	rc.responseHeaders.Add("alt-svc", "h3=\":443\"; ma=86400")
+	rc.responseHeaders.Add("x-req-id", rc.ReqID)
 
 	return rc
 }
 
-func (rc *RequestContext) RespondReader(statusCode int, reader io.Reader) error {
+func (rc *RequestContext) RespondReader(statusCode int, reader io.ReadCloser) error {
 	rc.responseStatus = statusCode
 	rc.responseReader = reader
 	return nil
@@ -80,13 +82,13 @@ func (rc *RequestContext) RespondReader(statusCode int, reader io.Reader) error 
 
 func (rc *RequestContext) RespondString(statusCode int, res string) error {
 	rc.responseStatus = statusCode
-	rc.responseReader = strings.NewReader(res)
+	rc.responseReader = io.NopCloser(strings.NewReader(res))
 	return nil
 }
 
 func (rc *RequestContext) RespondBytes(statusCode int, res []byte) error {
 	rc.responseStatus = statusCode
-	rc.responseReader = bytes.NewReader(res)
+	rc.responseReader = io.NopCloser(bytes.NewReader(res))
 	return nil
 }
 

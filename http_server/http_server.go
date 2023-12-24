@@ -137,7 +137,7 @@ func handleRequest(rc *RequestContext) error {
 	if err != nil {
 		return fmt.Errorf("error in doOriginRequest: %w", err)
 	}
-	defer originRes.Body.Close()
+	// The response writer will close the body
 
 	// Check for replay header
 	var replays int64 = 0
@@ -157,7 +157,7 @@ func handleRequest(rc *RequestContext) error {
 		if err != nil {
 			return fmt.Errorf("error in doOriginRequest: %w", err)
 		}
-		defer originRes.Body.Close()
+		// The response writer will close the body
 
 		replayHeader = originRes.Header.Get("x-replay")
 		replays++
@@ -206,8 +206,12 @@ func writeRequest(rc *RequestContext, handlerError error) error {
 		responseStatus = http.StatusInternalServerError
 	}
 
+	// Write the response headers
+	rc.responseHeaders.Write(rc.responseWriter)
+
 	var err error
 	if !rc.Hijacked() {
+		defer rc.responseReader.Close()
 		// Write the status code
 		rc.responseWriter.WriteHeader(responseStatus)
 
@@ -219,6 +223,7 @@ func writeRequest(rc *RequestContext, handlerError error) error {
 		if handlerError != nil {
 			// Let's first write the request ID
 			_, err := rc.responseWriter.Write([]byte(fmt.Sprintf("Request ID:\n\t%s\nError:\n\t%s", rc.ReqID)))
+			logger.Warn().Msg("wrote request id")
 			if err != nil {
 				return fmt.Errorf("error writing request ID to error response: %w", err)
 			}
