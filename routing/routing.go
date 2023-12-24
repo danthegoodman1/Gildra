@@ -54,7 +54,7 @@ var (
 // MatchDestination will take in an unmodified request, and will determine where it should be routed to.
 // This must be called before we look into anything else
 func (c *Config) MatchDestination(ctx context.Context, req *http.Request) (dest Destination, err error) {
-	ctx, span := tracing.GildraTracer.Start(ctx, "HTTPHandler")
+	ctx, span := tracing.GildraTracer.Start(ctx, "matchDestination")
 	defer span.End()
 
 	if len(c.Rules) == 0 {
