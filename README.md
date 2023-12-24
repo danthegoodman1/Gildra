@@ -61,7 +61,7 @@ If you exceed the `MAX_REPLAYS` env var (default `3`) for a single request then 
 
 ## Tracing
 
-OTLP Tracing can be configured with the `TRACING` (`== 1`, default off), `OLTP_ENDPOINT`, and `TRACING_SERVICE_NAME` (default `gildra`) environment variables. If an `OTLP_ENDPOINT` is not provided, it will pretty-print to stdout for debug.
+OTLP Tracing can be configured with the `TRACING` (`= 1`, default off), `OLTP_ENDPOINT`, and `TRACING_SERVICE_NAME` (default `gildra`) environment variables. If an `OTLP_ENDPOINT` is not provided, it will pretty-print to stdout for debug.
 
 ## Metrics
 
