@@ -7,6 +7,7 @@ import (
 	"github.com/danthegoodman1/Gildra/control_plane"
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/internal"
+	"github.com/danthegoodman1/Gildra/routing"
 	"github.com/danthegoodman1/Gildra/tracing"
 	"github.com/danthegoodman1/Gildra/utils"
 	"github.com/quic-go/quic-go"
@@ -33,6 +34,8 @@ var (
 	h3Server     *http3.Server
 
 	ErrInternalErrorFetchingTLS = errors.New("internal error fetching TLS")
+	ErrNoDestination            = errors.New("no destination for config")
+	ErrFailedToCast             = errors.New("failed to cast")
 )
 
 const (
@@ -42,85 +45,78 @@ const (
 )
 
 var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	fqdn := r.Host
-	isTLS := r.TLS != nil
-	ctx := context.Background()
-	start := time.Now()
-
-	logger := zerolog.Ctx(ctx)
-
-	ctx, span := tracing.GildraTracer.Start(ctx, "HTTPHandler")
-	defer span.End()
-
-	requestID := utils.GenKSortedID("req_")
-	span.SetAttributes(attribute.String("fqdn", fqdn))
-	span.SetAttributes(attribute.Bool("tls", isTLS))
-	span.SetAttributes(attribute.String("requestID", requestID))
-
-	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
-		return c.Str("fqdn", fqdn).Bool("tls", isTLS).Str("requestID", requestID).Int64("requestLength", r.ContentLength)
-	})
+	defer r.Body.Close() // close when we are done JUST in case (but I think it does by default)
 
 	internal.Metric_OpenConnections.Inc()
 	defer internal.Metric_OpenConnections.Dec()
-	if upgradeHeader := r.Header.Get("Upgrade"); upgradeHeader == "h2c" {
-		logger.Debug().Msg(fmt.Sprint("Marking h2c as HTTP/2.0"))
-		r.Proto = "HTTP/2.0"
-	}
-	logger.Debug().Msg(fmt.Sprint("Proto:", r.Proto))
-	logger.Debug().Msg(fmt.Sprint("Headers:", r.Header))
-	logger.Debug().Msg(fmt.Sprint("Host:", r.Host))
-	span.SetAttributes(attribute.String("proto", r.Proto))
-	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
-		return c.Str("proto", r.Proto)
-	})
+
+	rc := NewRequestContext(r, w)
+	ctx := rc.Request.Context()
+	logger := zerolog.Ctx(ctx)
+
+	logger.Info().Msg("request")
+
+	_, span := tracing.GildraTracer.Start(ctx, "HTTPHandler")
+	defer span.End()
 
 	if utils.Env_HTTPTimeoutSec > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(utils.Env_HTTPTimeoutSec))
+		ctx, cancel := context.WithTimeout(rc.Request.Context(), time.Second*time.Duration(utils.Env_HTTPTimeoutSec))
 		defer cancel()
+		rc.Request.WithContext(ctx)
 	}
+
+	logger.Debug().Msg(fmt.Sprint("Proto:", r.Proto))
+	logger.Debug().Msg(fmt.Sprint("Headers:", r.Header))
+	logger.Debug().Msg(fmt.Sprint("Host:", r.Host))
 
 	// Check for an ACME challenge
 	if strings.HasPrefix(r.URL.Path, ACMEPathPrefix) || strings.HasPrefix(r.URL.Path, ACMETestPathPrefix) || strings.HasPrefix(r.URL.Path, ZeroSSLPathPrefix) {
-		handleHTTPChallenge(ctx, fqdn, w, r)
+		// This has its own handling
+		handleHTTPChallenge(rc)
 		return
 	}
+
+	err := writeRequest(rc, handleRequest(rc))
+	if err != nil {
+		logger.Error().Err(err).Msg("error in writeRequest")
+	}
+	return
+})
+
+func handleRequest(rc *RequestContext) error {
+	ctx := rc.Request.Context()
+	logger := zerolog.Ctx(ctx)
+
+	_, span := tracing.GildraTracer.Start(ctx, "handleRequest")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("fqdn", rc.FQDN))
+	span.SetAttributes(attribute.Bool("tls", rc.IsTLS))
+	span.SetAttributes(attribute.String("requestID", rc.ReqID))
+	span.SetAttributes(attribute.String("proto", rc.Proto))
 
 	if utils.Dev_TextResponse {
 		logger.Debug().Msg("dev response, writing text")
-		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400")
-		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, "DEV response\n\tproto: %s\n", r.Proto)
-		return
+		return rc.RespondString(http.StatusCreated, fmt.Sprintf("DEV response\n\tproto: %s\n", rc.Proto))
 	}
 
-	config, err := control_plane.GetFQDNConfig(ctx, fqdn)
+	config, err := control_plane.GetFQDNConfig(ctx, rc.FQDN)
 	if err != nil {
-		respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error in control_plane.GetFQDNConfig")
-		return
+		return fmt.Errorf("error in control_plane.GetFQDNConfig: %w", err)
 	}
 
-	// Replace up through the domain name with destination
-	// this only works because incoming requests don't have the scheme and host attached to the URL
-	path := r.URL.String()
-
-	dest, err := config.MatchDestination(ctx, fqdn, path, r)
+	dest, err := config.MatchDestination(ctx, rc.FQDN, rc.PathQuery, rc.Request)
 	if err != nil {
-		respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error in config.MatchDestination")
-		return
+		return fmt.Errorf("error in config.MatchDestination: %w", err)
 	}
 	if dest == nil {
-		respondServerError(ctx, span, w, http.StatusServiceUnavailable, err, "got no destination")
-		return
+		return ErrNoDestination
 	}
 
 	if dest.DEVTextResponse {
 		logger.Debug().Msg("dev response, writing text")
-		w.Header().Add("alt-svc", "h3=\":443\"; ma=86400")
-		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, "DEV response\n\tproto: %s\n", r.Proto)
-		return
+		return rc.RespondString(http.StatusOK, fmt.Sprintf("DEV response\n\tproto: %s\n", rc.Proto))
 	}
 
 	if dest.TimeoutSec != nil {
@@ -128,23 +124,20 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(*dest.TimeoutSec))
 		defer cancel()
+		rc.Request.WithContext(ctx)
 	}
 
 	// Proxy the request
-	originReq, err := makeOriginRequest(ctx, fqdn, dest.URL+path, isTLS, r)
+	originReq, err := makeOriginRequest(rc, dest)
 	if err != nil {
-		respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error making origin request")
-		return
+		return fmt.Errorf("error in makeOriginRequest: %w", err)
 	}
 
 	originRes, err := doOriginRequest(ctx, originReq, -1)
 	if err != nil {
-		respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error doing origin request")
-		return
+		return fmt.Errorf("error in doOriginRequest: %w", err)
 	}
 	defer originRes.Body.Close()
-
-	logger.Info().Msg("request")
 
 	// Check for replay header
 	var replays int64 = 0
@@ -154,17 +147,15 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			return c.Str("replayHeader", replayHeader).Int64("replays", replays)
 		})
 		logger.Debug().Msg("replaying request")
-		originReq, err = makeOriginRequest(ctx, fqdn, replayHeader+path, isTLS, r)
+		originReq, err = makeOriginRequest(rc, dest)
 		if err != nil {
-			respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error making origin request after replay")
-			return
+			return fmt.Errorf("error in makeOriginRequest: %w", err)
 		}
 		originReq.Header.Set("X-Replayed", fmt.Sprint(replays))
 
 		originRes, err = doOriginRequest(ctx, originReq, replays)
 		if err != nil {
-			respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error doing origin request after replay")
-			return
+			return fmt.Errorf("error in doOriginRequest: %w", err)
 		}
 		defer originRes.Body.Close()
 
@@ -176,99 +167,119 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// We hit the limit
 		logger.Warn().Msg("exceeded max replays, sending error to client")
 		span.SetAttributes(attribute.Bool("exceededMaxReplays", true))
-		w.WriteHeader(http.StatusBadGateway)
-		_, err := fmt.Fprint(w, "exceeded max replays")
-		if err != nil {
-			logger.Error().Err(err).Msg("error writing internal error to HTTP request")
-		}
-		return
+		return rc.RespondString(http.StatusBadGateway, "exceeded max replays")
 	}
 
-	logger.Debug().Msg(fmt.Sprint(r.Header.Get("Connection") == "Upgrade", originRes.StatusCode, originRes.StatusCode == http.StatusSwitchingProtocols))
+	logger.Debug().Msg(fmt.Sprint(rc.Request.Header.Get("Connection") == "Upgrade", originRes.StatusCode, originRes.StatusCode == http.StatusSwitchingProtocols))
 
 	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
 		return c.Int("status", originRes.StatusCode).Int64("responseLength", originRes.ContentLength)
 	})
 
-	defer func() {
-		logger.Info().Int64("ms", time.Now().Sub(start).Milliseconds()).Msg("response")
-	}()
-
-	if r.Header.Get("Connection") == "Upgrade" && originRes.StatusCode == http.StatusSwitchingProtocols {
+	if rc.Request.Header.Get("Connection") == "Upgrade" && originRes.StatusCode == http.StatusSwitchingProtocols {
 		logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
 			return c.Bool("websocket", true)
 		})
 		// Websocket
-		handleUpgradeResponse(ctx, w, originReq, originRes)
-		return
+		return handleUpgradeResponse(rc, originReq, originRes)
 	}
 
 	// Copy the headers
 	for key, vals := range originRes.Header {
 		for _, val := range vals {
-			w.Header().Add(key, val)
+			rc.responseHeaders.Add(key, val)
 		}
 	}
-	// Add h3 header
-	w.Header().Add("alt-svc", "h3=\":443\"; ma=86400")
-	// Start the response
-	w.WriteHeader(originRes.StatusCode)
-	span.SetAttributes(attribute.Int("status", originRes.StatusCode))
 
-	// Pump the body
-	_, err = io.Copy(w, originRes.Body)
-	if err != nil {
-		logger.Error().Err(err).Msg("error copying body from origin to client, this request is pretty broken at this point and the client will probably fail due to mismatched headers and body content")
+	return rc.RespondReader(originRes.StatusCode, originRes.Body)
+}
+
+func writeRequest(rc *RequestContext, handlerError error) error {
+	ctx := rc.Request.Context()
+	logger := zerolog.Ctx(ctx)
+	responseStatus := rc.responseStatus
+
+	// Error-based overrides
+	if errors.Is(handlerError, ErrNoDestination) {
+		responseStatus = http.StatusServiceUnavailable
+	} else if handlerError != nil {
+		responseStatus = http.StatusInternalServerError
 	}
 
-	fmt.Printf("%+v\n", w.Header())
+	var err error
+	if !rc.Hijacked() {
+		// Write the status code
+		rc.responseWriter.WriteHeader(responseStatus)
 
-	return
-})
+		_, span := tracing.GildraTracer.Start(ctx, "writeRequest")
+		defer span.End()
 
-func handleUpgradeResponse(ctx context.Context, w http.ResponseWriter, req *http.Request, res *http.Response) {
+		span.SetAttributes(attribute.Int("status", responseStatus))
+
+		if handlerError != nil {
+			// Let's first write the request ID
+			_, err := rc.responseWriter.Write([]byte(fmt.Sprintf("Request ID:\n\t%s\nError:\n\t%s", rc.ReqID)))
+			if err != nil {
+				return fmt.Errorf("error writing request ID to error response: %w", err)
+			}
+
+			if responseStatus != http.StatusInternalServerError {
+				// Write the error message instead
+				_, err := rc.responseWriter.Write([]byte(handlerError.Error()))
+				return err
+			}
+		}
+		// Otherwise write the response
+		_, err = io.Copy(rc.responseWriter, rc.responseReader)
+	}
+
+	logger.Info().Int64("ms", time.Now().Sub(rc.Created).Milliseconds()).Msg("response")
+	return err
+}
+
+func handleUpgradeResponse(rc *RequestContext, req *http.Request, res *http.Response) error {
+	ctx := rc.Request.Context()
 	ctx, span := tracing.GildraTracer.Start(ctx, "handleUpgradeResponse")
 	defer span.End()
 	logger := zerolog.Ctx(ctx)
 
 	if req.Header.Get("Upgrade") != res.Header.Get("Upgrade") {
 		logger.Warn().Msg("mismatched upgrade headers")
-		w.WriteHeader(http.StatusConflict)
-		_, err := fmt.Fprint(w, "mismatched upgrade headers")
-		if err != nil {
-			logger.Error().Err(err).Msg("error writing to HTTP request")
-		}
-		return
+		return rc.RespondString(http.StatusConflict, "mismatched upgrade headers")
 	}
 
 	backConn, ok := res.Body.(io.ReadWriteCloser)
 	if !ok {
-		logger.Fatal().Msg("failed to cast response body to readwritecloser")
-		return
+		return fmt.Errorf("%w: response body to readwritecloser", ErrFailedToCast)
 	}
 	defer backConn.Close()
 
-	hj, ok := w.(http.Hijacker)
+	// Hijack the handler
+	hj, ok := rc.responseWriter.(http.Hijacker)
 	if !ok {
-		logger.Fatal().Msg("failed to cast responsewriter to hijacker")
-		return
+		return fmt.Errorf("%w: responseWriter to http.Hijacker", ErrFailedToCast)
+	}
+
+	if err := rc.Hijack(); err != nil {
+		return err
 	}
 
 	conn, brw, err := hj.Hijack()
 	if err != nil {
-		logger.Fatal().Msgf("Failed to hijack: %s\n", err)
-		return
+		return fmt.Errorf("error in hj.Hijack: %w", err)
 	}
 	defer conn.Close()
 
+	// **We now own the response**
+
 	res.Body = nil // res.Write only writes the headers; we have res.Body in backConn above
 	if err := res.Write(brw); err != nil {
-		logger.Fatal().Msgf("Failed to write headers: %s\n", err)
-		return
+		logger.Error().Err(err).Msgf("Failed to write headers: %s\n", err)
+		return nil
 	}
 	if err := brw.Flush(); err != nil {
-		logger.Fatal().Msgf("Failed to flush headers: %s\n", err)
-		return
+		logger.Error().Err(err).Msgf("Failed to flush headers: %s\n", err)
+		return nil
 	}
 
 	spc := switchProtocolCopier{user: conn, backend: backConn}
@@ -281,11 +292,11 @@ func handleUpgradeResponse(ctx context.Context, w http.ResponseWriter, req *http
 
 	err = g.Wait()
 	if err != nil {
-		fmt.Printf("Error with websocket: %s\n", err)
+		logger.Error().Err(err).Msgf("Failed copying websocket bytes: %s\n", err)
 	} else {
-		logger.Debug().Msg(fmt.Sprint("Websocket hung up"))
+		logger.Debug().Msg("Websocket hung up")
 	}
-	return
+	return nil
 }
 
 func StartServers() error {
@@ -392,25 +403,27 @@ func respondServerError(ctx context.Context, span trace.Span, w http.ResponseWri
 }
 
 // makeOriginRequest makes a clone of the incoming request with additional headers added and adjustments to the destination.
-func makeOriginRequest(ctx context.Context, fqdn, finalURL string, isTLS bool, r *http.Request) (*http.Request, error) {
-	originReq, err := http.NewRequestWithContext(ctx, r.Method, finalURL, r.Body)
+func makeOriginRequest(rc *RequestContext, dest *routing.Destination) (*http.Request, error) {
+	ctx := rc.Request.Context()
+	finalURL := dest.URL + rc.PathQuery
+	originReq, err := http.NewRequestWithContext(ctx, rc.Request.Method, finalURL, rc.Request.Body)
 	if err != nil {
 		return nil, err
 	}
 
 	// Switch in the headers, but keep original Host
-	originReq.Header = r.Header.Clone()
+	originReq.Header = rc.Request.Header.Clone()
 
 	if utils.Env_DevDisableHost {
 		originReq.Host = ""
 	} else {
 		// Forward the host
-		originReq.Host = fqdn
+		originReq.Host = rc.FQDN
 	}
 
 	// Additional headers
-	originReq.Header.Set("X-Url-Scheme", lo.Ternary(isTLS, "https", "http"))
-	originReq.Header.Set("X-Forwarded-Proto", r.Proto)
+	originReq.Header.Set("X-Url-Scheme", lo.Ternary(rc.IsTLS, "https", "http"))
+	originReq.Header.Set("X-Forwarded-Proto", rc.Proto)
 	originReq.Header.Set("X-Forwarded-To", finalURL)
 	originReq.Header.Set("X-Forwarded-For", func(r *http.Request) string {
 		incomingIP := strings.Split(r.RemoteAddr, ":")[0] // remove the port
@@ -418,7 +431,7 @@ func makeOriginRequest(ctx context.Context, fqdn, finalURL string, isTLS bool, r
 			return existing + fmt.Sprintf(", %s", incomingIP)
 		}
 		return incomingIP
-	}(r))
+	}(rc.Request))
 	return originReq, nil
 }
 
