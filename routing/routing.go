@@ -1,8 +1,10 @@
 package routing
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"github.com/danthegoodman1/Gildra/tracing"
 	"net/http"
 )
 
@@ -51,7 +53,10 @@ var (
 
 // MatchDestination will take in an unmodified request, and will determine where it should be routed to.
 // This must be called before we look into anything else
-func (c *Config) MatchDestination(req *http.Request) (dest Destination, err error) {
+func (c *Config) MatchDestination(ctx context.Context, req *http.Request) (dest Destination, err error) {
+	ctx, span := tracing.GildraTracer.Start(ctx, "HTTPHandler")
+	defer span.End()
+
 	if len(c.Rules) == 0 {
 		err = fmt.Errorf("no rules found: %w", ErrInvalidConfig)
 		return

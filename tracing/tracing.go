@@ -15,6 +15,10 @@ import (
 	"os"
 )
 
+var (
+	GildraTracer = otel.Tracer("gildra")
+)
+
 // InitTracer creates a new OLTP trace provider instance and registers it as global trace provider.
 func InitTracer(ctx context.Context) (tp *trace.TracerProvider, err error) {
 	logger := zerolog.Ctx(ctx)

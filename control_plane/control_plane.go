@@ -11,10 +11,10 @@ import (
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/internal"
 	"github.com/danthegoodman1/Gildra/routing"
+	"github.com/danthegoodman1/Gildra/tracing"
 	"github.com/danthegoodman1/Gildra/utils"
 	"github.com/mailgun/groupcache/v2"
 	"github.com/rs/zerolog"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"io"
 	"net/http"
@@ -108,7 +108,7 @@ func StopCache(ctx context.Context) error {
 
 // Bytes of routing.Config
 func getFQDNConfigBytes(ctx context.Context, fqdn string) ([]byte, error) {
-	ctx, span := otel.Tracer("gildra").Start(ctx, "getFQDNConfigBytes")
+	ctx, span := tracing.GildraTracer.Start(ctx, "getFQDNConfigBytes")
 	defer span.End()
 	span.SetAttributes(attribute.String("fqdn", fqdn))
 	span.SetAttributes(attribute.Bool("cached", false))
@@ -139,7 +139,7 @@ func getFQDNConfigBytes(ctx context.Context, fqdn string) ([]byte, error) {
 
 // Bytes of control_plane.GetCertRes
 func getFQDNCertBytes(ctx context.Context, fqdn string) ([]byte, error) {
-	ctx, span := otel.Tracer("gildra").Start(ctx, "getFQDNCertBytes")
+	ctx, span := tracing.GildraTracer.Start(ctx, "getFQDNCertBytes")
 	defer span.End()
 	span.SetAttributes(attribute.String("fqdn", fqdn))
 	span.SetAttributes(attribute.Bool("cached", false))
@@ -169,7 +169,7 @@ func getFQDNCertBytes(ctx context.Context, fqdn string) ([]byte, error) {
 }
 
 func GetFQDNConfig(ctx context.Context, fqdn string) (*routing.Config, error) {
-	ctx, span := otel.Tracer("gildra").Start(ctx, "GetFQDNConfig")
+	ctx, span := tracing.GildraTracer.Start(ctx, "GetFQDNConfig")
 	defer span.End()
 	span.SetAttributes(attribute.String("fqdn", fqdn))
 
@@ -203,7 +203,7 @@ type GetCertRes struct {
 }
 
 func GetFQDNCert(ctx context.Context, fqdn string) (*tls.Certificate, error) {
-	ctx, span := otel.Tracer("gildra").Start(ctx, "GetFQDNCert")
+	ctx, span := tracing.GildraTracer.Start(ctx, "GetFQDNCert")
 	defer span.End()
 	span.SetAttributes(attribute.String("fqdn", fqdn))
 
