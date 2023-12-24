@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	GildraTracer = otel.Tracer("gildra")
+	GildraTracer = otel.Tracer(utils.Env_TracingServiceName)
 )
 
 // InitTracer creates a new OLTP trace provider instance and registers it as global trace provider.
