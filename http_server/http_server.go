@@ -336,11 +336,11 @@ func StartServers() error {
 		Addr:       ":443",
 	}
 
-	globalLogger.Debug().Msg("Starting Gildra on :80 (HTTP/1.1 and HTTP/2)")
+	globalLogger.Debug().Msg("Gildra listening on :80 (HTTP/1.1 and HTTP/2)")
 	go httpServer.Serve(listener)
-	globalLogger.Debug().Msg("Starting Gildra on :443 (HTTP/1.1 and HTTP/2)")
+	globalLogger.Debug().Msg("Gildra listening on :443 (HTTP/1.1 and HTTP/2)")
 	go httpServer.Serve(tlsListener)
-	globalLogger.Debug().Msg("Starting Gildra on :443 (HTTP/3)")
+	globalLogger.Debug().Msg("Gildra listening on :443 (HTTP/3)")
 	go h3Server.ListenAndServe()
 	return nil
 }
