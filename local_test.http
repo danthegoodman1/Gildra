@@ -1,11 +1,14 @@
 ### Basic GET
-GET http://localhost:80/echo
+GET http://localhost/echo
 
 ### Echo request through Gildra
-GET http://localhost:80/echo?hey=ho
+GET http://localhost/echo?hey=ho
 
 ### Echo request through Gildra with replay (stay under)
-GET http://localhost:80/echo?hey=ho&replay_lim=2
+GET http://localhost/echo?hey=ho&replay_lim=2
 
 ### Echo request through Gildra with replay (exceed)
-GET http://localhost:80/echo?hey=ho&replay_lim=3
+GET http://localhost/echo?hey=ho&replay_lim=3
+
+### Fail glob path matching
+GET http://localhost/notecho

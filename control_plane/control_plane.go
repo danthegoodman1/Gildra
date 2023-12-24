@@ -187,6 +187,8 @@ func GetFQDNConfig(ctx context.Context, fqdn string) (*routing.Config, error) {
 		}
 	}
 
+	fmt.Printf("got fqdn bytes %s\n", b)
+
 	var config routing.Config
 	err = json.Unmarshal(b, &config)
 	if err != nil {

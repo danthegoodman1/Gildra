@@ -28,9 +28,9 @@ import (
 )
 
 var (
-	logger     = gologger.NewLogger()
-	httpServer *http.Server
-	h3Server   *http3.Server
+	globalLogger = gologger.NewLogger()
+	httpServer   *http.Server
+	h3Server     *http3.Server
 
 	ErrInternalErrorFetchingTLS = errors.New("internal error fetching TLS")
 )
@@ -94,13 +94,21 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 	config, err := control_plane.GetFQDNConfig(ctx, fqdn)
 	if err != nil {
-		respondInternalError(span, w, err, "error in control_plane.GetFQDNConfig")
+		respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error in control_plane.GetFQDNConfig")
 		return
 	}
 
-	dest, err := config.MatchDestination(ctx, r)
+	// Replace up through the domain name with destination
+	// this only works because incoming requests don't have the scheme and host attached to the URL
+	path := r.URL.String()
+
+	dest, err := config.MatchDestination(ctx, fqdn, path, r)
 	if err != nil {
-		respondInternalError(span, w, err, "error in config.MatchDestination")
+		respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error in config.MatchDestination")
+		return
+	}
+	if dest == nil {
+		respondServerError(ctx, span, w, http.StatusServiceUnavailable, err, "got no destination")
 		return
 	}
 
@@ -112,20 +120,16 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Replace up through the domain name with destination
-	// this only works because incoming requests don't have the scheme and host attached to the URL
-	path := r.URL.String()
-
 	// Proxy the request
 	originReq, err := makeOriginRequest(ctx, fqdn, dest.URL+path, isTLS, r)
 	if err != nil {
-		respondInternalError(span, w, err, "error making origin request")
+		respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error making origin request")
 		return
 	}
 
 	originRes, err := doOriginRequest(ctx, originReq, -1)
 	if err != nil {
-		respondInternalError(span, w, err, "error doing origin request")
+		respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error doing origin request")
 		return
 	}
 	defer originRes.Body.Close()
@@ -142,14 +146,14 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger.Debug().Msg("replaying request")
 		originReq, err = makeOriginRequest(ctx, fqdn, replayHeader+path, isTLS, r)
 		if err != nil {
-			respondInternalError(span, w, err, "error making origin request after replay")
+			respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error making origin request after replay")
 			return
 		}
 		originReq.Header.Set("X-Replayed", fmt.Sprint(replays))
 
 		originRes, err = doOriginRequest(ctx, originReq, replays)
 		if err != nil {
-			respondInternalError(span, w, err, "error doing origin request after replay")
+			respondServerError(ctx, span, w, http.StatusInternalServerError, err, "error doing origin request after replay")
 			return
 		}
 		defer originRes.Body.Close()
@@ -212,13 +216,18 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	return
 })
 
-func handleUpgradeResponse(ctx context.Context, rw http.ResponseWriter, req *http.Request, res *http.Response) {
+func handleUpgradeResponse(ctx context.Context, w http.ResponseWriter, req *http.Request, res *http.Response) {
 	ctx, span := tracing.GildraTracer.Start(ctx, "handleUpgradeResponse")
 	defer span.End()
 	logger := zerolog.Ctx(ctx)
 
 	if req.Header.Get("Upgrade") != res.Header.Get("Upgrade") {
-		respondInternalError(span, rw, errors.New("mismatched upgrade headers"), "error checking upgrade headers")
+		logger.Warn().Msg("mismatched upgrade headers")
+		w.WriteHeader(http.StatusConflict)
+		_, err := fmt.Fprint(w, "mismatched upgrade headers")
+		if err != nil {
+			logger.Error().Err(err).Msg("error writing to HTTP request")
+		}
 		return
 	}
 
@@ -229,7 +238,7 @@ func handleUpgradeResponse(ctx context.Context, rw http.ResponseWriter, req *htt
 	}
 	defer backConn.Close()
 
-	hj, ok := rw.(http.Hijacker)
+	hj, ok := w.(http.Hijacker)
 	if !ok {
 		logger.Fatal().Msg("failed to cast responsewriter to hijacker")
 		return
@@ -327,11 +336,11 @@ func StartServers() error {
 		Addr:       ":443",
 	}
 
-	logger.Debug().Msg("Starting httpServer on :80 (HTTP/1.1 and HTTP/2)")
+	globalLogger.Debug().Msg("Starting httpServer on :80 (HTTP/1.1 and HTTP/2)")
 	go httpServer.Serve(listener)
-	logger.Debug().Msg("Starting httpServer on :443 (HTTP/1.1 and HTTP/2)")
+	globalLogger.Debug().Msg("Starting httpServer on :443 (HTTP/1.1 and HTTP/2)")
 	go httpServer.Serve(tlsListener)
-	logger.Debug().Msg("Starting httpServer on :443 (HTTP/3)")
+	globalLogger.Debug().Msg("Starting httpServer on :443 (HTTP/3)")
 	go h3Server.ListenAndServe()
 	return nil
 }
@@ -353,16 +362,18 @@ func Shutdown(ctx context.Context) error {
 }
 
 // handles writing the error, should always return after calling this
-func respondInternalError(span trace.Span, w http.ResponseWriter, e error, msg string) {
+func respondServerError(ctx context.Context, span trace.Span, w http.ResponseWriter, status int, e error, msg string) {
+	logger := zerolog.Ctx(ctx)
 	logger.Error().Err(e).Msg(msg)
-	w.WriteHeader(http.StatusInternalServerError)
-	span.SetAttributes(attribute.Int("status", http.StatusInternalServerError))
+	w.WriteHeader(status)
+	span.SetAttributes(attribute.Int("status", status))
 	_, err := fmt.Fprint(w, "internal error")
 	if err != nil {
 		logger.Error().Err(err).Msg("error writing internal error to HTTP request")
 	}
 }
 
+// makeOriginRequest makes a clone of the incoming request with additional headers added and adjustments to the destination.
 func makeOriginRequest(ctx context.Context, fqdn, finalURL string, isTLS bool, r *http.Request) (*http.Request, error) {
 	originReq, err := http.NewRequestWithContext(ctx, r.Method, finalURL, r.Body)
 	if err != nil {
