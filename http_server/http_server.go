@@ -207,7 +207,11 @@ func writeRequest(rc *RequestContext, handlerError error) error {
 	}
 
 	// Write the response headers
-	rc.responseHeaders.Write(rc.responseWriter)
+	for key, vals := range rc.responseHeaders {
+		for _, val := range vals {
+			rc.responseWriter.Header().Add(key, val)
+		}
+	}
 
 	var err error
 	if !rc.Hijacked() {

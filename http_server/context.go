@@ -69,7 +69,7 @@ func NewRequestContext(r *http.Request, rw http.ResponseWriter) *RequestContext 
 
 	// Write HTTP/3 support header
 	rc.responseHeaders.Add("alt-svc", "h3=\":443\"; ma=86400")
-	rc.responseHeaders.Add("x-req-id", rc.ReqID)
+	rc.responseHeaders.Add("g-req-id", rc.ReqID)
 
 	return rc
 }
