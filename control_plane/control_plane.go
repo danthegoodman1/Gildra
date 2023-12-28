@@ -40,7 +40,6 @@ type (
 	}
 )
 
-// InitCache must only be called after groupcache is registered
 func InitCache(ctx context.Context) {
 	logger := zerolog.Ctx(ctx)
 	logger.Debug().Msg("initializing cache")
