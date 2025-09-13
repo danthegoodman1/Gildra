@@ -16,7 +16,6 @@ Mutli-tenant TLS terminating proxy for L7 traffic. Supports unlimited domains an
   - [Design](#design)
     - [Fetching routing config and cert in separate operations](#fetching-routing-config-and-cert-in-separate-operations)
   - [FAQs](#faqs)
-    - [Why not support TCP (TLS) traffic?](#why-not-support-tcp-tls-traffic)
     - [Why support the HTTP-01 challenge?](#why-support-the-http-01-challenge)
     - [What Certificate Authority (CA) should I use?](#what-certificate-authority-ca-should-i-use)
 <!-- TOC -->
@@ -100,14 +99,6 @@ This works especially well because the groupcache package not only already handl
 As a result, after we load the cert into the request handler and go to look up the routing config, we've already started fetching it and save that much time. Often it's ready in cache once we go to look it up!
 
 ## FAQs
-
-### Why not support TCP (TLS) traffic?
-
-While this wouldn't be too difficult to add, it does require a decent change in request handling architecture and configurability. Additionally, most services that use TCP directly such as databases prefer to be the managers of certificates and encrypted traffic (just see the warnings that happen when you run them without!), and are not multi-tenant in the same way a web service might be.
-
-We also wanted the ability to support L7 configuration options like headers, routing, and more.
-
-TL;DR we wanted to start simple, and hit the majority of uses cases.
 
 ### Why support the HTTP-01 challenge?
 
