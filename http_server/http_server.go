@@ -4,6 +4,12 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/danthegoodman1/Gildra/control_plane"
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/internal"
@@ -19,11 +25,6 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/net/http2/h2c"
 	"golang.org/x/sync/errgroup"
-	"io"
-	"net"
-	"net/http"
-	"strings"
-	"time"
 
 	"golang.org/x/net/http2"
 )
@@ -358,7 +359,7 @@ func StartServers() error {
 	h3Server = &http3.Server{
 		TLSConfig:  tlsConfig,
 		Handler:    handler,
-		QuicConfig: &quic.Config{},
+		QUICConfig: &quic.Config{},
 		Addr:       ":443",
 	}
 
@@ -377,12 +378,7 @@ func Shutdown(ctx context.Context) error {
 		return httpServer.Shutdown(ctx)
 	})
 	g.Go(func() error {
-		delta := time.Second * 5
-		deadline, ok := ctx.Deadline()
-		if ok {
-			delta = time.Now().Sub(deadline)
-		}
-		return h3Server.CloseGracefully(delta)
+		return h3Server.Shutdown(ctx)
 	})
 	return g.Wait()
 }
