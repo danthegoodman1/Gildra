@@ -2,13 +2,14 @@ package http_server
 
 import (
 	"fmt"
+	"net/http"
+	"path"
+	"strings"
+
 	"github.com/danthegoodman1/Gildra/control_plane"
 	"github.com/danthegoodman1/Gildra/internal"
 	"github.com/danthegoodman1/Gildra/tracing"
 	"go.opentelemetry.io/otel/attribute"
-	"net/http"
-	"path"
-	"strings"
 )
 
 // func handleHTTPChallenge(ctx context.Context, fqdn string, w http.ResponseWriter, r *http.Request) {
@@ -63,5 +64,4 @@ func handleHTTPChallenge(rc *RequestContext) {
 	}
 	globalLogger.Debug().Msg(fmt.Sprint("wrote response", key))
 	internal.Metric_ACME_HTTP_Challenges.Inc()
-	return
 }

@@ -3,14 +3,14 @@ package http_server
 import (
 	"bytes"
 	"errors"
-	"fmt"
-	"github.com/danthegoodman1/Gildra/routing"
-	"github.com/danthegoodman1/Gildra/utils"
-	"github.com/rs/zerolog"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/danthegoodman1/Gildra/routing"
+	"github.com/danthegoodman1/Gildra/utils"
+	"github.com/rs/zerolog"
 )
 
 var (
@@ -58,7 +58,7 @@ func NewRequestContext(r *http.Request, rw http.ResponseWriter) *RequestContext 
 
 	if upgradeHeader := r.Header.Get("Upgrade"); upgradeHeader == "h2c" {
 		// Mark h2c as HTTP/2.0
-		logger.Debug().Msg(fmt.Sprint("Marking h2c as HTTP/2.0"))
+		logger.Debug().Msg("Marking h2c as HTTP/2.0")
 		rc.Proto = "HTTP/2.0"
 	}
 

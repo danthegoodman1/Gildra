@@ -1,10 +1,11 @@
 package observability
 
 import (
-	"github.com/danthegoodman1/Gildra/gologger"
 	"log"
 	"net/http"
 	httppprof "net/http/pprof"
+
+	"github.com/danthegoodman1/Gildra/gologger"
 
 	"github.com/labstack/echo/v4"
 	prom "github.com/prometheus/client_golang/prometheus"
@@ -17,7 +18,7 @@ func StartInternalHTTPServer(address string, prom prometheus.Reporter) error {
 	server := echo.New()
 	server.HideBanner = true
 	server.HidePort = true
-	logger.Info().Str("address", address).Msg("Starting observability API")
+	logger.Debug().Str("address", address).Msg("Starting observability API")
 	server.GET("/metrics", echo.WrapHandler(prom.HTTPHandler()))
 	server.Any("/debug/pprof/*", echo.WrapHandler(http.HandlerFunc(httppprof.Index)))
 	server.Any("/debug/pprof/cmdline", echo.WrapHandler(http.HandlerFunc(httppprof.Cmdline)))

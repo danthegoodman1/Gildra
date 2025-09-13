@@ -4,6 +4,12 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/danthegoodman1/Gildra/control_plane"
 	"github.com/danthegoodman1/Gildra/gologger"
 	"github.com/danthegoodman1/Gildra/internal"
@@ -19,11 +25,6 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/net/http2/h2c"
 	"golang.org/x/sync/errgroup"
-	"io"
-	"net"
-	"net/http"
-	"strings"
-	"time"
 
 	"golang.org/x/net/http2"
 )
@@ -81,7 +82,6 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logger.Error().Err(err).Msg("error in writeRequest")
 	}
-	return
 })
 
 func handleRequest(rc *RequestContext) error {
@@ -238,7 +238,7 @@ func writeRequest(rc *RequestContext, handlerError error) error {
 		}
 	}
 
-	logger.Info().Int64("ms", time.Now().Sub(rc.Created).Milliseconds()).Msg("response")
+	logger.Info().Int64("ms", time.Since(rc.Created).Milliseconds()).Msg("response")
 	return err
 }
 
@@ -338,8 +338,6 @@ func StartServers() error {
 		NextProtos: []string{"h2", "http/1.1", "h3", "h3-29"},
 	}
 
-	tlsListener, _ := tls.Listen("tcp", ":443", tlsConfig)
-
 	listener, _ := net.Listen("tcp", ":80")
 
 	h2cServer := &http2.Server{}
@@ -355,17 +353,27 @@ func StartServers() error {
 		return fmt.Errorf("error in http2.ConfigureServer: %w", err)
 	}
 
+	// Create a raw TCP listener for TLS
+	rawTLSListener, err := net.Listen("tcp", ":443")
+	if err != nil {
+		return fmt.Errorf("failed to listen on :443: %w", err)
+	}
+
+	// Create SNI listener that will handle routing and TLS
+	// It starts listening automatically
+	NewSNIListener(rawTLSListener, tlsConfig, nil, httpServer) // nil uses DefaultSNIRouter
+
 	h3Server = &http3.Server{
 		TLSConfig:  tlsConfig,
 		Handler:    handler,
-		QuicConfig: &quic.Config{},
+		QUICConfig: &quic.Config{},
 		Addr:       ":443",
 	}
 
 	globalLogger.Debug().Msg("Gildra listening on :80 (HTTP/1.1 and HTTP/2)")
 	go httpServer.Serve(listener)
-	globalLogger.Debug().Msg("Gildra listening on :443 (HTTP/1.1 and HTTP/2)")
-	go httpServer.Serve(tlsListener)
+	globalLogger.Debug().Msg("Gildra listening on :443 (HTTP/1.1 and HTTP/2 with SNI routing)")
+	// SNI listener is already running in its own goroutine
 	globalLogger.Debug().Msg("Gildra listening on :443 (HTTP/3)")
 	go h3Server.ListenAndServe()
 	return nil
@@ -377,12 +385,7 @@ func Shutdown(ctx context.Context) error {
 		return httpServer.Shutdown(ctx)
 	})
 	g.Go(func() error {
-		delta := time.Second * 5
-		deadline, ok := ctx.Deadline()
-		if ok {
-			delta = time.Now().Sub(deadline)
-		}
-		return h3Server.CloseGracefully(delta)
+		return h3Server.Shutdown(ctx)
 	})
 	return g.Wait()
 }

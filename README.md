@@ -2,18 +2,22 @@
 Mutli-tenant TLS terminating proxy for L7 traffic. Supports unlimited domains and certs with HTTP/1.1, 2, and 3.
 
 <!-- TOC -->
-* [Gildra](#gildra)
-  * [Supported incoming protocols](#supported-incoming-protocols)
-  * [ACME HTTP-01 and ZeroSSL HTTP challenge support](#acme-http-01-and-zerossl-http-challenge-support)
-  * [Environment Variables](#environment-variables)
-  * [Added Headers](#added-headers)
-  * [The `x-replay` header](#the-x-replay-header)
-  * [Metrics](#metrics)
-  * [Design](#design)
-    * [Fetching routing config and cert in separate operations](#fetching-routing-config-and-cert-in-separate-operations)
-  * [FAQs](#faqs)
-    * [Why not support TCP (TLS) traffic?](#why-not-support-tcp-tls-traffic)
-    * [Why support the HTTP-01 challenge?](#why-support-the-http-01-challenge)
+- [Gildra](#gildra)
+  - [Supported incoming protocols](#supported-incoming-protocols)
+  - [SNI Proxying](#sni-proxying)
+  - [ACME HTTP-01 and ZeroSSL HTTP challenge support](#acme-http-01-and-zerossl-http-challenge-support)
+  - [Environment Variables](#environment-variables)
+  - [Added Headers](#added-headers)
+    - [Added to the request from Gildra to the origin](#added-to-the-request-from-gildra-to-the-origin)
+    - [Added to the response from Gildra to the client](#added-to-the-response-from-gildra-to-the-client)
+  - [The `x-replay` header](#the-x-replay-header)
+  - [Tracing](#tracing)
+  - [Metrics](#metrics)
+  - [Design](#design)
+    - [Fetching routing config and cert in separate operations](#fetching-routing-config-and-cert-in-separate-operations)
+  - [FAQs](#faqs)
+    - [Why support the HTTP-01 challenge?](#why-support-the-http-01-challenge)
+    - [What Certificate Authority (CA) should I use?](#what-certificate-authority-ca-should-i-use)
 <!-- TOC -->
 
 Unlike other solutions, Gildra sits in your cloud. This means that requests aren't slowed down by being routed through another provider, and nobody sees your unencrypted traffic but you.
@@ -26,6 +30,10 @@ Unlike other solutions, Gildra sits in your cloud. This means that requests aren
 - H3 (TLS only)
 
 All connections will be terminated and forwarded to the origin as HTTP(S)/1.1
+
+## SNI Proxying
+
+With the SNI proxy, you can perform TLS-passthrough TCP connections. This allows for TCP proxying with the same lookup capabilities. For example, you can serve Posgtres (17+, `sslnegotiation=direct, NextProtos: []string{"postgresql"}`) or ClickHouse with their native TCP clients.
 
 ## ACME HTTP-01 and ZeroSSL HTTP challenge support
 
@@ -91,14 +99,6 @@ This works especially well because the groupcache package not only already handl
 As a result, after we load the cert into the request handler and go to look up the routing config, we've already started fetching it and save that much time. Often it's ready in cache once we go to look it up!
 
 ## FAQs
-
-### Why not support TCP (TLS) traffic?
-
-While this wouldn't be too difficult to add, it does require a decent change in request handling architecture and configurability. Additionally, most services that use TCP directly such as databases prefer to be the managers of certificates and encrypted traffic (just see the warnings that happen when you run them without!), and are not multi-tenant in the same way a web service might be.
-
-We also wanted the ability to support L7 configuration options like headers, routing, and more.
-
-TL;DR we wanted to start simple, and hit the majority of uses cases.
 
 ### Why support the HTTP-01 challenge?
 
