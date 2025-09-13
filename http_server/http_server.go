@@ -82,7 +82,6 @@ var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logger.Error().Err(err).Msg("error in writeRequest")
 	}
-	return
 })
 
 func handleRequest(rc *RequestContext) error {
@@ -239,7 +238,7 @@ func writeRequest(rc *RequestContext, handlerError error) error {
 		}
 	}
 
-	logger.Info().Int64("ms", time.Now().Sub(rc.Created).Milliseconds()).Msg("response")
+	logger.Info().Int64("ms", time.Since(rc.Created).Milliseconds()).Msg("response")
 	return err
 }
 
