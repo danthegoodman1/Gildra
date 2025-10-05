@@ -23,21 +23,16 @@ type SNIListener struct {
 	httpServer *http.Server
 }
 
-// SNIRouter decides what to do with a connection based on SNI and ALPN
+// SNIRouter decides where to route a connection based on SNI and ALPN
 type SNIRouter interface {
-	// RouteHTTP returns true if the connection should be handled by the HTTP server
-	// false if it should be handled differently (e.g., proxied directly)
-	RouteHTTP(ctx context.Context, sni string, alpn []string) (bool, error)
-
-	// HandleDirectProxy handles connections that should be proxied directly
-	// This is called when Route returns false
-	HandleDirectProxy(ctx context.Context, conn net.Conn, sni string, alpn []string, clientHello []byte) error
+	// Route returns the backend address (ip:port) to proxy to, or empty string to handle via HTTP server
+	Route(ctx context.Context, sni string, alpn []string) (backendAddr string, err error)
 }
 
 // DefaultSNIRouter is a simple implementation that routes everything to the HTTP server
 type DefaultSNIRouter struct{}
 
-func (d *DefaultSNIRouter) RouteHTTP(ctx context.Context, sni string, alpn []string) (bool, error) {
+func (d *DefaultSNIRouter) Route(ctx context.Context, sni string, alpn []string) (string, error) {
 	// Hardcoded list of domains to proxy directly
 	backendMap := map[string]string{
 		"api.test": "127.0.0.1:8443",
@@ -51,47 +46,19 @@ func (d *DefaultSNIRouter) RouteHTTP(ctx context.Context, sni string, alpn []str
 		Msg("DefaultSNIRouter checking route")
 
 	// Check if this domain should be directly proxied
-	if _, shouldProxy := backendMap[sni]; shouldProxy {
+	if backendAddr, ok := backendMap[sni]; ok {
 		globalLogger.Info().
 			Str("sni", sni).
+			Str("backend", backendAddr).
 			Msg("Domain should be proxied directly")
-		// This domain should be proxied directly, not handled by HTTP server
-		return false, nil
+		return backendAddr, nil
 	}
 
 	globalLogger.Debug().
 		Str("sni", sni).
 		Msg("Domain should go through HTTP server")
-	// By default, handle everything through the HTTP server
-	return true, nil
-}
-
-func (d *DefaultSNIRouter) HandleDirectProxy(ctx context.Context, conn net.Conn, sni string, alpn []string, clientHello []byte) error {
-	// // Default implementation just closes the connection
-	// // In a real implementation, you would proxy to the backend
-	// conn.Close()
-	// return nil
-
-	backendMap := map[string]string{
-		"api.test": "127.0.0.1:8443",
-		"app.test": "127.0.0.1:9443",
-		"db.test":  "127.0.0.1:5432",
-	}
-
-	// Get the backend address for this SNI
-	backendAddr, ok := backendMap[sni]
-	if !ok {
-		conn.Close()
-		return fmt.Errorf("no backend configured for %s", sni)
-	}
-
-	// Proxy the connection to the backend
-	globalLogger.Info().
-		Str("sni", sni).
-		Str("backend", backendAddr).
-		Msg("Establishing direct proxy connection")
-
-	return proxyConnection(conn, backendAddr)
+	// Empty string means handle via HTTP server
+	return "", nil
 }
 
 // NewSNIListener creates a new SNI-aware listener and starts handling connections
@@ -150,31 +117,23 @@ func (l *SNIListener) handleConnection(conn net.Conn) {
 		Strs("alpn", sniConn.alpn).
 		Msg("Peeked ClientHello")
 
-	shouldHandleHTTP, err := l.router.RouteHTTP(ctx, sniConn.sni, sniConn.alpn)
+	backendAddr, err := l.router.Route(ctx, sniConn.sni, sniConn.alpn)
 	if err != nil {
 		logger.Error().Err(err).Msg("Routing error")
 		conn.Close()
 		return
 	}
 
-	logger.Info().
-		Bool("shouldHandleHTTP", shouldHandleHTTP).
-		Str("sni", sniConn.sni).
-		Msg("Routing decision made")
-
-	if !shouldHandleHTTP {
-		// Handle direct proxy
+	if backendAddr != "" {
+		// Proxy directly to backend
 		logger.Info().
 			Str("sni", sniConn.sni).
-			Strs("alpn", sniConn.alpn).
-			Msg("Connection should be proxied directly")
+			Str("backend", backendAddr).
+			Msg("Proxying connection to backend")
 
-		// Create a connection with the buffered ClientHello
-		proxyConn := sniConn.PassthroughConn()
-
-		if err := l.router.HandleDirectProxy(ctx, proxyConn, sniConn.sni, sniConn.alpn, sniConn.peeked); err != nil {
-			logger.Error().Err(err).Msg("Failed to handle direct proxy")
-			proxyConn.Close()
+		// sniConn already replays the buffered ClientHello via its Read() method
+		if err := proxyConnection(sniConn, backendAddr); err != nil {
+			logger.Error().Err(err).Msg("Failed to proxy connection")
 		}
 		return
 	}
@@ -185,11 +144,8 @@ func (l *SNIListener) handleConnection(conn net.Conn) {
 		Strs("alpn", sniConn.alpn).
 		Msg("Routing to HTTP server")
 
-	// Create a connection that replays the ClientHello
-	replayConn := sniConn.PassthroughConn()
-
-	// Wrap with TLS
-	tlsConn := tls.Server(replayConn, l.tlsConfig)
+	// Wrap with TLS - sniConn already replays the ClientHello via its Read() method
+	tlsConn := tls.Server(sniConn, l.tlsConfig)
 
 	// Serve the HTTP request
 	l.httpServer.Serve(&singleConnListener{conn: tlsConn})
@@ -236,13 +192,9 @@ func newSNIConn(conn net.Conn, tlsConfig *tls.Config, router SNIRouter) *sniConn
 	}
 }
 
-// Read implements net.Conn Read
+// Read implements net.Conn Read, replaying the peeked ClientHello bytes first
 func (c *sniConn) Read(b []byte) (int, error) {
-	// If we have peeked bytes, read from them first
-	if c.reader != nil {
-		return c.reader.Read(b)
-	}
-	return c.Conn.Read(b)
+	return c.reader.Read(b)
 }
 
 // peekClientHello reads and parses the ClientHello to extract SNI and ALPN
@@ -290,28 +242,6 @@ func (c *sniConn) GetALPN() []string {
 // PeekClientHello returns the raw ClientHello bytes if available
 func (c *sniConn) PeekClientHello() []byte {
 	return c.peeked
-}
-
-// PassthroughConn creates a connection that can be passed to the TLS server
-// with the ClientHello bytes already read
-func (c *sniConn) PassthroughConn() net.Conn {
-	if c.reader != nil {
-		return &passthroughConn{
-			Conn:   c.Conn,
-			reader: c.reader,
-		}
-	}
-	return c.Conn
-}
-
-// passthroughConn wraps a connection with a custom reader
-type passthroughConn struct {
-	net.Conn
-	reader io.Reader
-}
-
-func (p *passthroughConn) Read(b []byte) (int, error) {
-	return p.reader.Read(b)
 }
 
 // proxyConnection handles the bidirectional proxying between client and backend
